@@ -21,6 +21,43 @@ plugin/
 - `lib/` 属于发布内容时, 应在构建后检查并纳入 npm package files.
 - 不要将 `lib/` 添加到 `.gitignore`, 以便构建产物可以被检查和发布.
 
+## Bundle 与 Profile 激活
+
+可安装的依赖不会自动成为 DSH 运行插件. 插件 package 必须声明 bundle patch, 让 `dsh plugin --profile web add` 能将它纳入 profile 的 bundles 列表:
+
+```json
+{
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  }
+}
+```
+
+`cordis.patch.yml` 至少插入插件自身的 Host entry:
+
+```yml
+- insert:
+    - id: dsh-example
+      name: dsh-example
+```
+
+同时必须公开 package metadata. `dsh-client-modules` 通过 `require.resolve('<package>/package.json')` 扫描 `dsh.client`, 所以有 `exports` 字段的插件必须包含:
+
+```json
+{
+  "exports": {
+    "./package.json": "./package.json"
+  }
+}
+```
+
+缺少该 export 时, Client 扫描器会将插件静默视为非 Client 插件, `/plugins/<package>/client.js` 不会发布. 安装后检查 profile 的 `dsh.profile.bundles` 包含插件名. 修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.
+
 ## 轻量化原则
 
 插件应优先使用 DSH 已提供的服务, UI primitives 和运行时能力. 能用标准 API 或少量本地代码解决的问题, 不引入大型框架或重复实现的基础设施.

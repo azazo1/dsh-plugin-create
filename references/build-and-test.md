@@ -63,3 +63,5 @@ Client factory 中使用 React 时, 通过 factory 的 `require('react')` 获取
 - registration id 等于插件 package name.
 - factory 返回的 `inject` 包含实际依赖.
 - package tarball 包含 Client bundle, Host bundle, 声明文件和 patch 文件.
+- 当 package 使用 `exports` 时, `require.resolve('<package>/package.json')` 可解析, 以便 DSH 扫描 `dsh.client` metadata.
+- 在运行中的 Web profile 中, `/plugins/<package>/client.js` 返回 Client bundle. 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.

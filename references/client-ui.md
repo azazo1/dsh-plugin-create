@@ -55,7 +55,7 @@ factory: (require) => {
 
 ## 3. 样式
 
-General 设置行应保持和现有设置项一致的布局:
+General 设置行默认必须使用 DSH 原生配置样式, 不得使用无主题 token 的最简 inline 布局代替. 即使设置项只有一个字段, 也必须提供与 General Settings 一致的分隔, 标签, 输入, hover, focus 和窄屏状态.
 
 - 使用 `display: flex`, `gap: 8px` 和 `padding: 16px 0`.
 - 使用 `var(--dsw-alias-label-primary)`, `var(--dsw-alias-label-tertiary)` 和现有 border token.

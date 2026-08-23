@@ -132,3 +132,22 @@ const message = scope.getSnapshot().value?.message ?? DEFAULT_MESSAGE
 ## 7. 依赖声明
 
 `package.json` 的 Client bundle 注入列表保留实际使用的模块, 至少包括对应的 runtime, locale, slots 和 settings 模块. 移除不再使用的 settings UI 子模块, 并同步更新 lockfile.
+
+## 8. General 设置项的完整接入
+
+如果用户要求在 `settings > general` 中编辑配置, 仅注册 Host schema 不够. 必须同时完成以下三层:
+
+1. Host 入口注册 namespace schema.
+2. Client 入口绑定同一 namespace 的 `settingsScope`.
+3. Client 入口通过 `ctx.slots.inject('settings.general.item', ...)` 注册可见设置行.
+
+`settings.general.item` 的 owner props 为空, 不会自动传入 label, value 或 scope. 绑定好的 scope 可以通过闭包传给组件, 组件不要自行创建另一份配置状态.
+
+文本配置项至少应包含:
+
+- 由 `scope.getSnapshot()` 提供的当前值.
+- 由 `scope.subscribe()` 驱动的外部变化更新.
+- 由 `scope.set(MESSAGE_FIELD, value)` 执行的写回.
+- 对未知数据结构的默认值回退.
+
+如果设置项使用 React, Client bundle 应通过 module loader factory 的 `require('react')` 获取 React runtime, 并将 React 声明为 peer dependency. 不要将 React 复制进插件 bundle.

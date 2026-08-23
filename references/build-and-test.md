@@ -31,3 +31,35 @@ src/  -- TypeScript build -->  lib/
 - `package.json` 的入口可以加载生成产物.
 - 包内容不包含源码外的临时文件.
 - 新增依赖没有改变不相关的插件行为.
+
+## Web Client 特殊构建
+
+DSH Web Client bundle 使用 `window.__ModuleLoader__` 的懒加载模块表, 不是普通浏览器 ESM. Client 入口需要在顶层执行:
+
+```ts
+window.__ModuleLoader__.load({
+  id: 'dsh-example',
+  factory: (require) => ({
+    inject: ['settingsScope', 'slots'],
+    apply(ctx) {
+      // plugin body
+    },
+  }),
+})
+```
+
+Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出普通 ESM, 会出现 `bundle loaded without registering ... via __ModuleLoader__.load`.
+
+建议将 Host 和 Client 分开构建:
+
+- Host: ESM, 例如 `lib/index.js`.
+- Client: IIFE, 例如 `lib/index.iife.js`.
+- `package.json` 的 `./client` export 指向实际的 IIFE 文件.
+
+Client factory 中使用 React 时, 通过 factory 的 `require('react')` 获取运行时, React 放在 peerDependencies 中. 构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.
+
+最小的入口验证可以在 Node VM 中执行 Client IIFE, 提供一个假 `window.__ModuleLoader__.load` 收集 registration, 然后检查:
+
+- registration id 等于插件 package name.
+- factory 返回的 `inject` 包含实际依赖.
+- package tarball 包含 Client bundle, Host bundle, 声明文件和 patch 文件.

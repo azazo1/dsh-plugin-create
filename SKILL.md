@@ -5,6 +5,8 @@ description: 创建和维护 DeepSeek Harness 插件, 覆盖 settings 配置, Ge
 
 # DSH Plugin Create
 
+> 如果 agent 处于 dsh 当中, 并且不是在创造模式下开始执行任务 (拥有运行时的访问能力就当作创造模式, 而不是根据名字匹配), 请先使用 ask 类工具询问用户是否继续, 因为非创造模式可能对插件开发有不便, 无法立刻看到结果.
+
 ## 章节索引
 
 - [Config](references/config.md): 配置项的设计, Host 注册和 Client 接入.

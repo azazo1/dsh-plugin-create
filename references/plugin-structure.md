@@ -10,6 +10,7 @@ plugin/
 │   └── client/          # Client 源码
 ├── lib/                 # 构建生成的 JavaScript 和类型声明
 ├── package.json
+├── justfile             # 可复现的安装, 检查和构建入口
 ├── tsconfig.json
 └── cordis.patch.yml
 ```

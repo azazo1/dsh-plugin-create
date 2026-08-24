@@ -25,7 +25,59 @@ inject: ['settingsScope', 'slots']
 
 不要额外依赖 `@deepseek-ai/dsh-client-ui-settings-general`. General shell 会提供 slot 的渲染位置.
 
-## 2. React 组件和 scope
+## 2. 独立配置页
+
+当插件拥有多个相关配置项, 需要独立标题, 描述, 分组或保存操作时, 使用 `settings.section`. 不要把完整页面压缩成 `settings.general.item`, 后者只适合 General 中的一行偏好项.
+
+独立页面注册为 `settings.section` 的 list entry. `id` 必须使用插件自己的唯一值, `order` 控制设置导航位置, `label` 是导航显示文本:
+
+```ts
+ctx.slots.inject('settings.section', () => ctx.slots.register(
+  {
+    name: 'settings.section',
+    id: 'dsh-example',
+    order: 100,
+    label: 'Example Plugin',
+  },
+  (props) => createElement(ExampleSettingsPage, props),
+))
+```
+
+页面组件会收到设置 shell 提供的 `close` 回调. 页面只负责自己的内容, 不要替换 `settings` shell, 导航栏或关闭按钮:
+
+```tsx
+function ExampleSettingsPage(props: { close: () => void }) {
+  return createElement(
+    'section',
+    { className: styles.section },
+    createElement('h2', null, 'Example Plugin'),
+    createElement('p', { className: styles.intro }, 'Configure the plugin.'),
+    createElement(ExamplePluginCard),
+  )
+}
+```
+
+独立页面的推荐内容结构与 DSH Plugins 设置页保持一致:
+
+- 页面容器使用 `max-width: 760px`, `display: flex`, `flex-direction: column` 和 `gap: 12px`.
+- 页面标题使用 `18px`, `font-weight: 600`, 描述使用 `13px` 和 `var(--dsw-alias-label-tertiary)`.
+- 多个相关设置放入插件卡片, 卡片使用 `var(--dsw-alias-bg-layer-3)`, `var(--dsw-alias-border-l2)` 和 `border-radius: 12px`.
+- 卡片字段使用上下 `12px` 内边距, 字段之间使用顶部 `1px solid var(--dsw-alias-border-l2)` 分隔.
+- 文本输入框使用 `height: 34px`, `padding: 0 12px`, `border-radius: 8px`, `background: var(--dsw-alias-bg-layer-3)` 和 `font-size: 13px`.
+- 输入框的 `:focus-visible` 使用 `var(--dsw-alias-brand-primary)` 边框, 不使用无主题的固定颜色.
+- 保存和重置操作放在卡片底部, 使用 `border-top`, `padding: 12px 0 4px` 和 `gap: 8px`.
+- 页面需要兼容窄屏, 操作区允许换行, 状态文本不能挤压按钮.
+
+正式插件的配置页面应绑定 `settingsScope`, 由 Host settings namespace 提供默认值, 读取和持久化. 不要在组件内部创建会绕过 Host 的全局配置状态:
+
+```ts
+const scope = ctx.settingsScope.bind({
+  namespace: SETTINGS_NAMESPACE,
+  decode: decodeExampleSettings,
+})
+```
+
+## 3. React 组件和 scope
 
 设置组件必须订阅 scope, 这样 Host 或其他设置面板写入后输入框仍然会更新:
 
@@ -53,7 +105,7 @@ factory: (require) => {
 }
 ```
 
-## 3. 样式
+## 4. 样式
 
 General 设置行默认必须使用 DSH 原生配置样式, 不得使用无主题 token 的最简 inline 布局代替. 即使设置项只有一个字段, 也必须提供与 General Settings 一致的分隔, 标签, 输入, hover, focus 和窄屏状态.
 
@@ -77,7 +129,7 @@ if (typeof document !== 'undefined' && !document.querySelector(`style[data-plugi
 }
 ```
 
-## 4. Client module loader
+## 5. Client module loader
 
 DSH Web Client 不加载普通 ESM 作为插件 Client entry. Client bundle 必须在顶层注册插件 ID:
 

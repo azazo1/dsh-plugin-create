@@ -92,5 +92,7 @@ dsh plugin --profile web add OWNER/REPOSITORY
 dsh plugin --profile web add OWNER/REPOSITORY#v0.1.0
 ```
 
+> 请及时替换 OWNER/REPOSITORY#REF 为真实值, 不要就写一个占位符在文档当中.
+
 省略 `#REF` 时使用仓库默认分支的最新内容, 通常是 `main`. 指定 `REF` 时优先使用发布 tag, 也可以使用明确的 commit. 发布文档和需要复现的环境应显式固定 tag 或 commit, 日常试用可以省略 `#REF` 获取最新版本.
 

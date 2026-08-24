@@ -30,6 +30,17 @@ just verify
 
 构建产物不应手工修改. 发布前应在干净环境重新生成 `lib/`, 并确认包内不包含未构建的临时文件.
 
+## Git Hosted Package Installation
+
+错误示例: 仓库已提交 `lib/`, 但仍在 `package.json` 中配置:
+
+```json
+{"scripts":{"prepare":"pnpm run build"}}
+```
+
+使用 github 方式安装 dsh 插件时 pnpm 会执行 `prepare`, 触发 `allowBuilds` 错误. 已提交 `lib/` 时应删除 `prepare`, 让安装直接使用构建产物.
+除非插件真的有需要在安装的时候进行构建的操作.
+
 ## 依赖审查
 
 构建前检查新增依赖是否真的必要. 优先复用 DSH 和平台已有能力, 避免为了少量逻辑引入大型运行时依赖.

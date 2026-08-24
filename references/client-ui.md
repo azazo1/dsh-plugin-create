@@ -113,7 +113,7 @@ General 设置行默认必须使用 DSH 原生配置样式, 不得使用无主�
 - 使用 `var(--dsw-alias-label-primary)`, `var(--dsw-alias-label-tertiary)` 和现有 border token.
 - 输入框可以使用 `var(--dsw-alias-bg-module-platform)`, 圆角 `18px`, 高度 `36px`.
 - 使用 `:hover` 和 `:focus` 状态, focus 边框应使用业务主色 token.
-- 自定义设置行的分割线放在行底部. 对位于现有项目之后的自定义行, 使用 `margin-bottom: 16px` 和 `border-bottom: 1px solid var(--dsw-alias-border-l2)`. 不要改为顶部分割线.
+- 自定义设置行的分割线放在行底部. 对位于现有项目之后的自定义行, 使用 `border-bottom: 1px solid var(--dsw-alias-border-l2)`. 不要改为顶部分割线.
 - 不要使用随意的纯色, 大块卡片或与 DSH 主题无关的视觉样式.
 - 窄屏时应切换为上下布局, 输入框宽度使用 `100%`.
 

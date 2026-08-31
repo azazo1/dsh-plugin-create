@@ -22,7 +22,7 @@ just verify
 
 ## Lockfile 与 CI
 
-插件使用 pnpm. 提交 `pnpm-lock.yaml`, 并在 `package.json` 声明 `packageManager`. CI 用 `pnpm install --frozen-lockfile` 安装依赖, 再用 `pnpm run check` 做类型检查, 测试和构建.
+插件使用 pnpm. 提交 `pnpm-lock.yaml`, 并在 `package.json` 声明 `packageManager`. CI 用 `pnpm install --frozen-lockfile` 安装依赖, 再用 `pnpm run check` 做类型检查, 测试和构建. 跟踪 DSH alpha 包时, 在 `pnpm-workspace.yaml` 把 `@deepseek-ai/*` 加入 `minimumReleaseAgeExclude`, 否则 frozen lockfile 会因 24 小时发布窗口拒绝安装.
 
 ## 基本流程
 

@@ -20,9 +20,13 @@ just verify
 
 `build-host` 和 `build-client` 应分别调用 Host ESM 和 Client IIFE 的构建配置. `verify` 应串联类型检查, 完整构建, 测试和 `pnpm pack --dry-run`, 并补充项目所需的 Client loader registration 检查. 不要在 justfile 中写入仅适用于沙箱的环境变量或临时缓存参数.
 
+## Lockfile 与 CI
+
+插件使用 pnpm. 提交 `pnpm-lock.yaml`, 并在 `package.json` 声明 `packageManager`. CI 用 `pnpm install --frozen-lockfile` 安装依赖, 再用 `pnpm run check` 做类型检查, 测试和构建.
+
 ## 基本流程
 
-1. 使用项目统一的包管理器安装依赖.
+1. 使用 pnpm 安装依赖.
 2. 执行 TypeScript 类型检查, 确认源码和声明没有类型错误.
 3. 执行构建脚本, 生成 `lib/` 下的 JavaScript, source map 和类型声明.
 4. 按项目需要运行针对 Host, Client 或配置逻辑的测试.

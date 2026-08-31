@@ -20,27 +20,25 @@ Host 和 Client 都从该文件导入配置标识, 避免重复编写字符串.
 
 ## 2. Host 端注册 schema
 
-在 Host 入口中使用 `@deepseek-ai/dsh-settings` 和 `@deepseek-ai/schemastery` 注册命名空间:
+在 Host 入口中使用 `@deepseek-ai/dsh-settings` 和 `@deepseek-ai/schemastery` 注册命名空间. 命名空间是小写字母开头的 kebab-case 字符串, 应与插件名一致, 直接传给 `register`:
 
 ```ts
+import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
+import type {} from '@deepseek-ai/dsh-settings'
 
-export const ExampleSettingsSchema = z.object({
+export const ExampleSettingsSchema: z<ExampleSettings> = z.object({
   [MESSAGE_FIELD]: z.string().default(DEFAULT_MESSAGE),
 })
 
 export function apply(ctx: Context): void {
   ctx.inject(['settings'], (settingsCtx) => {
-    settingsCtx.settings.register(
-      settingsNamespace(SETTINGS_NAMESPACE),
-      ExampleSettingsSchema,
-    )
+    settingsCtx.settings.register(SETTINGS_NAMESPACE, ExampleSettingsSchema)
   })
 }
 ```
 
-Host 端负责配置 schema, 默认值和持久化. 配置命名空间应与插件名称保持一致.
+Host 入口用 `import type {} from '@deepseek-ai/dsh-settings'` 引入 `Context.settings`. Host 端负责配置 schema, 默认值和持久化.
 
 ## 3. Client 端绑定 settings scope
 
@@ -131,7 +129,7 @@ const message = scope.getSnapshot().value?.message ?? DEFAULT_MESSAGE
 
 ## 7. 依赖声明
 
-`package.json` 的 Client bundle 注入列表保留实际使用的模块, 至少包括对应的 runtime, locale, slots 和 settings 模块. 移除不再使用的 settings UI 子模块, 并同步更新 lockfile.
+`package.json` 的 Client bundle 注入列表只保留实际使用的模块, 通常包括 locale, slots 和 settings. 移除不再使用的 settings UI 子模块, 并同步更新 `pnpm-lock.yaml`.
 
 ## 8. General 设置项的完整接入
 

@@ -51,16 +51,6 @@ just verify
 
 新增大型依赖时, 应在变更说明中记录替代方案, 体积和启动影响, 许可证, 维护状态以及为什么不能使用更轻量的实现. 测试依赖和运行时依赖分开声明, 能放入 `devDependencies` 的不放入运行时依赖.
 
-## 最小验证
-
-至少验证以下内容:
-
-- 类型检查通过.
-- 构建可以从 `src/` 生成 `lib/`.
-- `package.json` 的入口可以加载生成产物.
-- 包内容不包含源码外的临时文件.
-- 新增依赖没有改变不相关的插件行为.
-
 ## Web Client 特殊构建
 
 DSH Web Client bundle 使用 `window.__ModuleLoader__` 的懒加载模块表, 不是普通浏览器 ESM. Client 入口需要在顶层执行:
@@ -87,6 +77,18 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 
 Client factory 中使用 React 时, 通过 factory 的 `require('react')` 获取运行时, React 放在 peerDependencies 中. 构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.
 
+当 pack 包的 `devDependencies` 不被传给消费者, 而 `.d.ts` 引用了某些声明时, 关闭 `skipLibCheck` 做一次诊断类型检查, 把实际消费的声明归属包声明为直接 dev/peer 依赖, 避免 `skipLibCheck: true` 把缺失包悄悄变成 `any`.
+
+## 验证
+
+在干净环境重新生成构建产物, 并做最小入口验证:
+
+- 类型检查通过.
+- 构建可以从 `src/` 生成 `lib/`.
+- `package.json` 的入口可以加载生成产物.
+- 包内容不包含源码外的临时文件.
+- 新增依赖没有改变不相关的插件行为.
+
 最小的入口验证可以在 Node VM 中执行 Client IIFE, 提供一个假 `window.__ModuleLoader__.load` 收集 registration, 然后检查:
 
 - registration id 等于插件 package name.
@@ -94,3 +96,19 @@ Client factory 中使用 React 时, 通过 factory 的 `require('react')` 获取
 - package tarball 包含 Client bundle, Host bundle, 声明文件和 patch 文件.
 - 当 package 使用 `exports` 时, `require.resolve('<package>/package.json')` 可解析, 以便 DSH 扫描 `dsh.client` metadata.
 - 在运行中的 Web profile 中, `/plugins/<package>/client.js` 返回 Client bundle. 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
+
+## 真实组合验证
+
+对用户实际会运行的插件, 单元测试或 mock Context 不能替代真实组合测试. 从变更面选择最小的充分测试集:
+
+- 纯逻辑或内部 helper: 只运行单元测试.
+- 模型可见行为 (prompt, tool Schema, tool 输出, Skill 目录): 在所属 example suite 中添加无凭据 snapshot, 然后添加真实组合测试.
+- 协议可见行为 (ACP, JSON-RPC, wire transport): 添加无凭据 snapshot.
+- 用户可见行为 (CLI transcript, 交互式终端, GUI 流程): 使用所属仓库的产品入口测试套件.
+- Provider 行为 (新 adapter 或真实 provider 特性): 凭据可用且执行被授权时运行真实 API e2e 测试.
+
+真实组合测试通过 Loader 和应用 / 进程入口启动测试用 `cordis.yml`, 只 mock 外部服务或非确定性输入, 断言模型可见请求或日志, 持久化状态或用户可见输出. 不要给已发布默认值添加测试选项.
+
+对于带 `bin` 的包, 构建产物必须在本机 Node 下运行 (不用 tsx), 暴露 tsx 可能隐藏的关闭竞态, 模块解析和被吞掉的加载失败; 缺少必需配置时进程必须非零退出.
+
+Web Client 插件还必须真实挂载验证, 而不是只接受一个 HTTP 200: 读取 host boot manifest, 请求宣告的 client artifact, 证明注册和挂载完成.

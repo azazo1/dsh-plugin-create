@@ -77,7 +77,33 @@ const scope = ctx.settingsScope.bind({
 })
 ```
 
-## 3. React 组件和 scope
+## 3. 插件设置卡 (keyed slot)
+
+从 0.1.2-alpha.3 起, web client 的 Settings > Plugins 面板提供 `settings.plugin.item` keyed slot seam, 插件可以在设置面板内渲染页面内设置卡. 键等于插件的 settings namespace:
+
+```ts
+ctx.slots.inject(
+  `settings.plugin.item[${SETTINGS_NAMESPACE}]`,
+  () => ctx.slots.register(
+    {
+      name: `settings.plugin.item[${SETTINGS_NAMESPACE}]`,
+      id: `${SETTINGS_NAMESPACE}-card`,
+      order: 100,
+      inject: () => ({ scope }),
+    },
+    (props) => createElement(ExamplePluginCard, props),
+  ),
+)
+```
+
+接入步骤:
+
+- Host 半区通过 `settings` service 注册同名 namespace schema (见 [config.md](config.md) 第 9 节).
+- 卡片通过声明的 schema 读取 / 更新, 而不是 ad-hoc 文件; 设置变更实时生效, 无需重启.
+- 完整选项列表仍保留在 `settings.yaml` 中供高级旋钮使用, 文档化卡片覆盖的子集.
+- 只注册实际需要的服务, 保持 client bundle 轻量.
+
+## 4. React 组件和 scope
 
 设置组件必须订阅 scope, 这样 Host 或其他设置面板写入后输入框仍然会更新:
 
@@ -105,7 +131,7 @@ factory: (require) => {
 }
 ```
 
-## 4. 样式
+## 5. 样式
 
 General 设置行默认必须使用 DSH 原生配置样式, 不得使用无主题 token 的最简 inline 布局代替. 即使设置项只有一个字段, 也必须提供与 General Settings 一致的分隔, 标签, 输入, hover, focus 和窄屏状态.
 
@@ -129,7 +155,7 @@ if (typeof document !== 'undefined' && !document.querySelector(`style[data-plugi
 }
 ```
 
-## 5. Client module loader
+## 6. Client module loader
 
 DSH Web Client 不加载普通 ESM 作为插件 Client entry. Client bundle 必须在顶层注册插件 ID:
 
@@ -145,11 +171,19 @@ window.__ModuleLoader__.load({
 })
 ```
 
-`id` 必须和 `package.json` 的插件名一致. 否则会出现类似下面的错误:
+`id` 必须和 `package.json` 的插件名完全一致. 否则会出现类似下面的错误:
 
 ```text
 bundle loaded without registering "dsh-example" via __ModuleLoader__.load
 ```
+
+三个标识必须一致, 以 `package.json` 的 `name` 为基准:
+
+1. Client bundle 的 registration id (`__ModuleLoader__.load` 的 id, 通常由 tsdown banner `PLUGIN_ID` 注入) == `package.json` 的 `name`.
+2. assembly row (插件自己的 `cordis.patch.yml` 或 home patch 里的 insert row) 的 `name` 使用裸包名 (带 scope, 例如 `'@dsh-external/dsh-input-history'`).
+3. `dsh --profile <name> --dump-config` 检查 row 名且无 pending.
+
+任何一处不一致都会导致 client 半区静默缺席 boot graph: 要么启动断言报 `loaded without registering`, 要么面板静默消失而日志无插件相关错误. 安装后验证 profile 的 `dsh.profile.bundles` 包含插件名.
 
 Client entry 还必须是浏览器脚本, 不能保留顶层 ESM `import` 或 `export`. 最简单的构建方式是将 Client 单独输出为 IIFE, Host 入口单独输出为 ESM:
 
@@ -185,4 +219,13 @@ export default defineConfig({
 }
 ```
 
-构建后应检查 Client 文件开头没有 `import`, 末尾没有 ESM `export`, 并且包含 `__ModuleLoader__.load({ id: ... })`.
+构建后应检查 Client 文件开头没有 `import`, 末尾没有 ESM `export`, 并且包含正确的 `__ModuleLoader__.load({ id: ... })` 注册.
+
+## 7. 验证
+
+- 索引页 HTML 的 `window.__DSH_BOOT__.entries` 包含 `"id":"<package name>"`.
+- 从组合路由 `/plugins/??<package name>/client.js&rev=...` 拉取的脚本 (URL 含 `??`; curl 需加 `-g`) 包含 `__ModuleLoader__.load({ id: "<package name>"`.
+- 启动日志没有 `loaded without registering` / `entries did not activate`.
+- `/plugins/<package>/client.js` 返回 Client bundle; 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
+
+修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.

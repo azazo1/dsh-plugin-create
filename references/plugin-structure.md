@@ -9,6 +9,7 @@ plugin/
 │   ├── shared.ts        # Host 和 Client 共享类型与常量
 │   └── client/          # Client 源码
 ├── lib/                 # 构建生成的 JavaScript 和类型声明
+├── dsh-plugin.naming.json  # 命名声明清单 (外部插件)
 ├── package.json
 ├── justfile             # 可复现的安装, 检查和构建入口
 ├── tsconfig.json
@@ -22,7 +23,7 @@ plugin/
 - `lib/` 属于发布内容时, 应在构建后检查并纳入 npm package files.
 - 不要将 `lib/` 添加到 `.gitignore`, 以便构建产物可以被检查和发布.
 
-## Bundle 与 Profile 激活
+## Manifest 与 Profile 激活
 
 可安装的依赖不会自动成为 DSH 运行插件. 插件 package 必须声明 bundle patch, 让 `dsh plugin --profile web add` 能将它纳入 profile 的 bundles 列表:
 
@@ -38,6 +39,10 @@ plugin/
   }
 }
 ```
+
+- `dsh.bundle` 声明这是一个 bundle 插件, 安装通过 `dsh plugin --profile web add <pkg>` 进入 `dsh.profile.bundles` layer stack, 修改后需要重启 `dsh web`.
+- 普通 Cordis 插件 (无 client 半区) 通过 `dsh plugin --profile web add <pkg>` 加一个 `cordis.patch.yml` insert row 即可, 配置级 HMR 实时挂载, 无需重启.
+- `dsh.client` 声明 client 半区 (platform + client 入口). client-modules 只扫描声明了 `dsh.client` 的包; 声明了 `dsh.bundle` 但没有 `dsh.client` 的包永远不会进入浏览器插件名册, client UI 缺席且 Node 半区无任何报错.
 
 `cordis.patch.yml` 至少插入插件自身的 Host entry:
 
@@ -96,3 +101,6 @@ dsh plugin --profile web add OWNER/REPOSITORY#v0.1.0
 
 省略 `#REF` 时使用仓库默认分支的最新内容, 通常是 `main`. 指定 `REF` 时优先使用发布 tag, 也可以使用明确的 commit. 发布文档和需要复现的环境应显式固定 tag 或 commit, 日常试用可以省略 `#REF` 获取最新版本.
 
+## 命名声明
+
+外部插件在仓库根目录提供 `dsh-plugin.naming.json`, 并在创建时运行离线校验, 详见 [naming.md](naming.md). 包名, 插件模块名, Loader row 名和 client 注册 id 都以 `package.json` 的 `name` 为基准保持一致.

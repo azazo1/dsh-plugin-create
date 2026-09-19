@@ -2,7 +2,7 @@
 
 DSH 插件是注册到 Cordis Context 上的能力包. 创建插件前先确定插件形式, 再按对应规范编写. 一个插件可以自由组合多种形式, 例如一个可配置的 tool 插件, 或者一个同时注册 tools 的 service 插件; 每种包含的形式都要满足它自己的契约.
 
-本参考以 dsh 0.1.2-rc.1 为准. 如果某个需求不属于下面五种形式, 把它映射到现有的扩展点并编写注册在那里的插件, 不要修改 Agent 循环本身.
+本参考按最新发布的 dsh 版本编写. 如果某个需求不属于下面五种形式, 把它映射到现有的扩展点并编写注册在那里的插件, 不要修改 Agent 循环本身.
 
 ## 1. 插件形式
 
@@ -21,10 +21,10 @@ DSH 插件是注册到 Cordis Context 上的能力包. 创建插件前先确定�
 | 添加模型可调用能力 | 在 `ctx.tools` 注册 |
 | 添加模型提供商 | 在 `ctx.llm` 注册 adapter |
 | 为单个会话提供不同的能力集 | 在 Agent preset 中组装 |
-| 添加 Shell 执行 | 实现并注册 `ctx.bash` backend |
-| 添加持久化终端执行 | 注册 `ctx.pty` backend 并加载 `dsh-tool-pty` |
+| 添加 Shell 执行 | 实现并注册 `ctx.shell` backend |
+| 添加持久化终端执行 | 注册 `ctx.terminals` backend 并加载 `dsh-tool-terminal` |
 | 添加人工命令 | 注册到 `ctx.commands` |
-| 添加后台任务 | 注册到 `ctx.tasks` |
+| 添加后台任务 | 注册到 `ctx.jobs` (`JobRegistry`) |
 | 添加文件系统访问或策略 | 实现 `ctx.fs` provider 或监听 `fs/*` 策略事件 |
 | 约束启动的进程 | 使用 `ctx.sandbox` backend |
 | 拦截请求, 工具或 turn | 使用 `agent/*` 或 `tools/*` 事件; turn 结束事件是 `agent/turn-stopping` |
@@ -77,7 +77,7 @@ export function apply(ctx: Context) {
 - 通过 `output.presentationMeta` 投射可回放的持久化卡片数据, 不要持久化规范值本身.
 - 用 `exec.agent` 做异步通知: `agent.inject({ content, source: { kind: 'plugin', plugin: '<name>' } })` 追加对下一个模型请求可见的持久化上下文. 它不会唤醒空闲的 Agent; 用 try/catch 保护已 dispose 的 Agent.
 
-长时运行工具用 `ctx.tasks.start({ kind, label, owner: exec.agent, run })` 注册后台工作, 用 task 持有的取消信号替代 `exec.signal`.
+长时运行工具用 `ctx.jobs` 注册后台工作 (`JobRegistry`), 用 job 持有的取消信号替代 `exec.signal`.
 
 ## 4. Hook Plugin
 
@@ -87,7 +87,7 @@ Hook 插件在文档化的扩展点拦截行为, 不修改 Agent 循环. "native
 
 | 目标 | 扩展点 |
 |---|---|
-| 对工具调用应用 allow, deny 或 ask 策略 | `tools/pre-execute`, 返回类型化 `PreToolDecision` |
+| 对工具调用应用 allow, deny, cancel 或 ask 策略 | `tools/pre-execute`, 返回类型化 `PreToolDecision` |
 | 应用后续 listener 无法撤销的最终单调 deny | `ctx.tools.guard()` |
 | 为超时, 重试或指标包装分发生命周期 | `tools/execute`, 只允许替换 `exec.signal` |
 | 转换结果, 替换呈现, 阻止结果或追加模型可见上下文 | `tools/post-execute` |
@@ -95,6 +95,8 @@ Hook 插件在文档化的扩展点拦截行为, 不修改 Agent 循环. "native
 | 拦截请求, step 或 turn | `agent/*` 事件; `agent/turn-stopping` 是 turn 结束事件 |
 | 短路或路由模型调用 | `llm/stream` waterfall |
 | 实施单调的 conclude-turn 策略 | 从终端工具调用 `ToolExecution.concludeTurn()` |
+
+`PreToolDecision` 的四种取值: `{ kind: 'allow' }`, `{ kind: 'deny', reason }`, `{ kind: 'cancel' }` 和 `{ kind: 'ask', reason? }`. `ask` 通过 `ctx.approval` 打开一次性审批请求; 审批缺席或无法应答时按 deny 处理.
 
 权限门模板:
 

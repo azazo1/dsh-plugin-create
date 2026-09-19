@@ -73,7 +73,7 @@ node <plugin-write-skill>/scripts/validate-names.mjs \
 ```sh
 node <plugin-write-skill>/scripts/query-registry.mjs \
   --manifest ./dsh-plugin.naming.json \
-  --harness-version 0.1.2-rc.1
+  --harness-version <当前 dsh 版本>
 ```
 
 默认索引是 `https://raw.githubusercontent.com/oh-my-dsh/dsh-plugin-registry/main/registry/index.json`. 把无匹配结果只当作 "没有已审阅的匹配", 把超时, 数据损坏或网络失败当作 "未知/未检查". 在线查询永不修改本地清单, 不自动重命名已发布表面, 也不把自动发现的候选变成保留. 正式保留只存在于来源支撑的条目被审阅并合并进中心注册表之后.

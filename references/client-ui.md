@@ -77,31 +77,38 @@ const scope = ctx.settingsScope.bind({
 })
 ```
 
-## 3. 插件设置卡 (keyed slot)
+## 3. 插件配置面 (Plugins 页面)
 
-从 0.1.2-alpha.3 起, web client 的 Settings > Plugins 面板提供 `settings.plugin.item` keyed slot seam, 插件可以在设置面板内渲染页面内设置卡. 键等于插件的 settings namespace:
+web client 的 Plugins 页面 (侧边栏 Plugins 入口) 是插件配置的承载面, 提供三个 slot:
+
+- `plugins.bundle.config`: keyed slot, 键等于插件包名, 渲染在该 bundle 自己的页面上, 位于描述和 row 列表之间.
+- `plugins.row.config`: keyed slot, 键为 `<包名>#<row id>`, row id 是 bundle patch 声明的 id; 注册后该 row 在 bundle 页面上出现一个 configure 入口, 点开进入以 row id 为标题的配置页.
+- `plugins.item`: list slot, 官方插件组的卡片, 由官方配置页占用, 外部插件不要注册.
+
+每个 entry 会收到 `view` owner prop (`'summary' | 'page'`): `summary` 渲染一行简介文本, `page` 渲染完整表单. 表单离开页面时丢弃未保存的编辑, 只有保存才写入. 以 `plugins.bundle.config` 为例:
 
 ```ts
 ctx.slots.inject(
-  `settings.plugin.item[${SETTINGS_NAMESPACE}]`,
+  'plugins.bundle.config',
   () => ctx.slots.register(
     {
-      name: `settings.plugin.item[${SETTINGS_NAMESPACE}]`,
-      id: `${SETTINGS_NAMESPACE}-card`,
+      name: 'plugins.bundle.config',
+      key: SETTINGS_NAMESPACE,  // 键等于插件包名
       order: 100,
       inject: () => ({ scope }),
     },
-    (props) => createElement(ExamplePluginCard, props),
+    (props) => createElement(props.view === 'page' ? ExampleConfigForm : ExampleConfigSummary, props),
   ),
 )
 ```
 
-接入步骤:
+接入要点:
 
 - Host 半区通过 `settings` service 注册同名 namespace schema (见 [config.md](config.md) 第 9 节).
-- 卡片通过声明的 schema 读取 / 更新, 而不是 ad-hoc 文件; 设置变更实时生效, 无需重启.
-- 完整选项列表仍保留在 `settings.yaml` 中供高级旋钮使用, 文档化卡片覆盖的子集.
+- 表单通过声明的 schema 读取 / 更新, 而不是 ad-hoc 文件.
 - 只注册实际需要的服务, 保持 client bundle 轻量.
+
+如果只需要一个设置 tab 入口, 也可以在 Settings 的 Plugins 分区里注册 `settings.plugins.tab` (list slot, `id` 为 tab key, `label` 为 tab 文本), 把页面内容渲染成该分区里的一个 tab.
 
 ## 4. React 组件和 scope
 
@@ -171,10 +178,10 @@ window.__ModuleLoader__.load({
 })
 ```
 
-`id` 必须和 `package.json` 的插件名完全一致. 否则会出现类似下面的错误:
+`id` 必须和 `package.json` 的插件名完全一致. 否则加载会报错:
 
 ```text
-bundle loaded without registering "dsh-example" via __ModuleLoader__.load
+client-modules: bundle <url> loaded without registering "<id>" via __ModuleLoader__.load
 ```
 
 三个标识必须一致, 以 `package.json` 的 `name` 为基准:
@@ -183,7 +190,7 @@ bundle loaded without registering "dsh-example" via __ModuleLoader__.load
 2. assembly row (插件自己的 `cordis.patch.yml` 或 home patch 里的 insert row) 的 `name` 使用裸包名 (带 scope, 例如 `'@dsh-external/dsh-input-history'`).
 3. `dsh --profile <name> --dump-config` 检查 row 名且无 pending.
 
-任何一处不一致都会导致 client 半区静默缺席 boot graph: 要么启动断言报 `loaded without registering`, 要么面板静默消失而日志无插件相关错误. 安装后验证 profile 的 `dsh.profile.bundles` 包含插件名.
+任何一处不一致都会导致 client 半区静默缺席 boot graph: 要么加载时报 `loaded without registering`, 要么面板静默消失而日志无插件相关错误. 浏览器半区的注册失败会进入 load report, 用 `cordis_inspect what:"temporary"` 读取. 安装后验证 profile 的 `dsh.profile.bundles` 包含插件名.
 
 Client entry 还必须是浏览器脚本, 不能保留顶层 ESM `import` 或 `export`. 最简单的构建方式是将 Client 单独输出为 IIFE, Host 入口单独输出为 ESM:
 
@@ -225,7 +232,7 @@ export default defineConfig({
 
 - 索引页 HTML 的 `window.__DSH_BOOT__.entries` 包含 `"id":"<package name>"`.
 - 从组合路由 `/plugins/??<package name>/client.js&rev=...` 拉取的脚本 (URL 含 `??`; curl 需加 `-g`) 包含 `__ModuleLoader__.load({ id: "<package name>"`.
-- 启动日志没有 `loaded without registering` / `entries did not activate`.
+- 启动日志没有 `loaded without registering` / boot activation audit 报错.
 - `/plugins/<package>/client.js` 返回 Client bundle; 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
 
 修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.

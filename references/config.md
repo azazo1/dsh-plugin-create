@@ -154,14 +154,14 @@ const message = scope.getSnapshot().value?.message ?? DEFAULT_MESSAGE
 
 如果设置项使用 React, Client bundle 应通过 module loader factory 的 `require('react')` 获取 React runtime, 并将 React 声明为 peer dependency. 不要将 React 复制进插件 bundle.
 
-## 9. 插件设置卡 (`settings.plugin.item`)
+## 9. 插件配置面 (`plugins.bundle.config`)
 
-需要更丰富的页面内配置表面时, 可以在官方 Settings > Plugins 面板中渲染插件设置卡. 这是 keyed slot: 键等于插件的 settings namespace.
+需要更丰富的配置表面时, 在侧边栏 Plugins 页面的 bundle 页上渲染配置表单. 这是 keyed slot: 键等于插件包名.
 
 1. Host 半区通过 `settings` service 注册插件的 settings namespace (与插件已用的命名空间同名).
-2. Client 渲染一个卡片到 `settings.plugin.item[key = namespace]`.
-3. 卡片通过声明的 schema 读取 / 更新, 而不是 ad-hoc 文件.
-4. 把完整选项列表保留在 `settings.yaml` 中供高级旋钮使用, 并文档化卡片展示的是哪个子集.
-5. 变更实时生效: 保存的状态会被正在运行的插件重新读取, 无需重启.
+2. Client 渲染一个配置 entry 到 `plugins.bundle.config`, 键为包名; 或注册到 `plugins.row.config` (键为 `<包名>#<row id>`) 把配置挂到单个 row 上.
+3. entry 通过 owner prop 的 `view` 区分两种渲染: `summary` 输出一行简介, `page` 输出完整表单.
+4. 表单通过声明的 schema 读取 / 更新, 而不是 ad-hoc 文件.
+5. 把完整选项列表保留在 `settings.yaml` 中供高级旋钮使用, 并文档化表单展示的是哪个子集.
 
-验证: 打开 Settings > Plugins, 找到插件的卡片, 切换 / 修改一个字段, 确认正在运行的插件无需 web 重启即做出反应; 检查打包后的 client 产物包含卡片入口, 而不只是源码.
+验证: 打开侧边栏 Plugins 页面, 进入 bundle 页, 修改一个字段并保存, 确认配置写回 settings namespace; 检查打包后的 client 产物包含配置 entry, 而不只是源码.

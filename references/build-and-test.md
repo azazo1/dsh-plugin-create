@@ -42,7 +42,7 @@ just verify
 {"scripts":{"prepare":"pnpm run build"}}
 ```
 
-使用 github 方式安装 dsh 插件时 pnpm 会执行 `prepare`, 触发 `allowBuilds` 错误. 已提交 `lib/` 时应删除 `prepare`, 让安装直接使用构建产物.
+使用 github 方式安装 dsh 插件时 pnpm 会执行 `prepare`, 触发 `allowBuilds` 错误, 用户需要在 profile 的 `pnpm-workspace.yaml` 中允许该包后重试安装. 已提交 `lib/` 时应删除 `prepare`, 让安装直接使用构建产物.
 除非插件真的有需要在安装的时候进行构建的操作.
 
 ## 依赖审查
@@ -67,15 +67,17 @@ window.__ModuleLoader__.load({
 })
 ```
 
-Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出普通 ESM, 会出现 `bundle loaded without registering ... via __ModuleLoader__.load`.
+Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出普通 ESM, 会出现 `client-modules: bundle <url> loaded without registering "<id>" via __ModuleLoader__.load`.
+
+`factory` 的 `require` 从平台模块表解析依赖, 表中可用的模块有: `react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`, `@deepseek-ai/cordis`, `@deepseek-ai/dsh-client-store`, `@deepseek-ai/dsh-client-ui-slots`, `@deepseek-ai/dsh-client-ui-primitives`, `@deepseek-ai/dsh-client-ui-dockkit`. 表外模块在构建时必须打进 bundle, 运行时请求表外模块会直接抛错. React 放在 peerDependencies 中.
 
 建议将 Host 和 Client 分开构建:
 
 - Host: ESM, 例如 `lib/index.js`.
-- Client: IIFE, 例如 `lib/index.iife.js`.
-- `package.json` 的 `./client` export 指向实际的 IIFE 文件.
+- Client: 浏览器目标, 例如 `lib/client.js` (官方 client bundle 使用 CJS 包装 + banner/footer 注入 `__ModuleLoader__.load`, 外部插件用 IIFE 等价实现).
+- `package.json` 的 `./client` export 指向实际的 Client 产物文件.
 
-Client factory 中使用 React 时, 通过 factory 的 `require('react')` 获取运行时, React 放在 peerDependencies 中. 构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.
+构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.
 
 当 pack 包的 `devDependencies` 不被传给消费者, 而 `.d.ts` 引用了某些声明时, 关闭 `skipLibCheck` 做一次诊断类型检查, 把实际消费的声明归属包声明为直接 dev/peer 依赖, 避免 `skipLibCheck: true` 把缺失包悄悄变成 `any`.
 
@@ -89,12 +91,12 @@ Client factory 中使用 React 时, 通过 factory 的 `require('react')` 获取
 - 包内容不包含源码外的临时文件.
 - 新增依赖没有改变不相关的插件行为.
 
-最小的入口验证可以在 Node VM 中执行 Client IIFE, 提供一个假 `window.__ModuleLoader__.load` 收集 registration, 然后检查:
+最小的入口验证可以在 Node VM 中执行 Client bundle, 提供一个假 `window.__ModuleLoader__.load` 收集 registration, 然后检查:
 
 - registration id 等于插件 package name.
 - factory 返回的 `inject` 包含实际依赖.
 - package tarball 包含 Client bundle, Host bundle, 声明文件和 patch 文件.
-- 当 package 使用 `exports` 时, `require.resolve('<package>/package.json')` 可解析, 以便 DSH 扫描 `dsh.client` metadata.
+- 当 package 使用 `exports` 时, `require.resolve('<package>/package.json')` 可解析 (需要 `exports` 中包含 `"./package.json"`), 以便 DSH 扫描 `dsh.client` metadata.
 - 在运行中的 Web profile 中, `/plugins/<package>/client.js` 返回 Client bundle. 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
 
 ## 真实组合验证

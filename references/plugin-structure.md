@@ -42,7 +42,7 @@ plugin/
 
 - `dsh.bundle` 声明这是一个 bundle 插件, 安装通过 `dsh plugin --profile web add <pkg>` 进入 `dsh.profile.bundles` layer stack, 修改后需要重启 `dsh web`.
 - 普通 Cordis 插件 (无 client 半区) 通过 `dsh plugin --profile web add <pkg>` 加一个 `cordis.patch.yml` insert row 即可, 配置级 HMR 实时挂载, 无需重启.
-- `dsh.client` 声明 client 半区 (platform + client 入口). client-modules 只扫描声明了 `dsh.client` 的包; 声明了 `dsh.bundle` 但没有 `dsh.client` 的包永远不会进入浏览器插件名册, client UI 缺席且 Node 半区无任何报错.
+- `dsh.client` 声明 client 半区: `platform: 'web'` 必填, `inject` (依赖的其他包行), `external` (非注入的模块请求) 和 `immediately` (启动一级预取) 可选. client-modules 只扫描声明了 `dsh.client` 的包; 声明了 `dsh.bundle` 但没有 `dsh.client` 的包永远不会进入浏览器插件名册, client UI 缺席且 Node 半区无任何报错.
 
 `cordis.patch.yml` 至少插入插件自身的 Host entry:
 
@@ -62,7 +62,7 @@ plugin/
 }
 ```
 
-缺少该 export 时, Client 扫描器会将插件静默视为非 Client 插件, `/plugins/<package>/client.js` 不会发布. 安装后检查 profile 的 `dsh.profile.bundles` 包含插件名. 修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.
+缺少该 export 时, Client 扫描器无法读取 manifest, 会将插件静默视为非 Client 插件, `/plugins/<package>/client.js` 不会发布. 安装后检查 profile 的 `dsh.profile.bundles` 包含插件名. 修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.
 
 ## 轻量化原则
 
@@ -100,6 +100,8 @@ dsh plugin --profile web add OWNER/REPOSITORY#v0.1.0
 > 请及时替换 OWNER/REPOSITORY#REF 为真实值, 不要就写一个占位符在文档当中.
 
 省略 `#REF` 时使用仓库默认分支的最新内容, 通常是 `main`. 指定 `REF` 时优先使用发布 tag, 也可以使用明确的 commit. 发布文档和需要复现的环境应显式固定 tag 或 commit, 日常试用可以省略 `#REF` 获取最新版本.
+
+git 方式安装拉取的是源码而不是构建产物, pnpm 不会自动运行构建脚本: 作者侧需要在 `package.json` 提供 `prepare` 脚本 (仅在确有安装期构建需求时, 已提交 `lib/` 的包应删除), 用户侧 pnpm >= 10 需要在 profile 的 `pnpm-workspace.yaml` 的 `allowBuilds` 中允许该包后重试安装. 发布 npm 包或 tarball 则两侧都不需要构建许可, 详见官方 publish 教程.
 
 ## 命名声明
 

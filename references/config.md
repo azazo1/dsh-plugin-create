@@ -75,6 +75,12 @@ Settings 表单按 **profile 条目 id** 定位一个插件的配置, 也就是�
 
 层级顺序是 bundle 自带 patch, profile 的 `cordis.patch.yml`, home 级 `cordis.patch.yml`, 最后是 `--patch` overlay; 一条 patch 按 id 替换该条目的整个 config.
 
+寻址用的条目 id 与槽位键不是一回事: `plugins.bundle.config` 的 key 是**包名**, 而 `ctx.configForms.get()` 与 `whileServed()` 收的是**条目 id**. 两者经常不同 (行 id 可以是 `notify`, 也可以是 `dsh-write-protect-policy`), 混用会让卡片静默不渲染: 界面一切正常, 只是那张卡上没有配置区. 真实行 id 看 bundle 自己的 patch:
+
+```shell
+grep -A2 'insert:' cordis.patch.yml
+```
+
 ## 3. 读写自己的配置
 
 业务代码读自己的 config 引用, 不要向 settings 服务要值:

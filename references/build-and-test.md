@@ -71,6 +71,8 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 
 `factory` 的 `require` 从平台模块表解析依赖, 表中可用的模块有: `react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`, `@deepseek-ai/cordis`, `@deepseek-ai/dsh-client-store`, `@deepseek-ai/dsh-client-ui-slots`, `@deepseek-ai/dsh-client-ui-primitives`, `@deepseek-ai/dsh-client-ui-dockkit`. 表外模块在构建时必须打进 bundle, 运行时请求表外模块会直接抛错. React 放在 peerDependencies 中.
 
+表内的包要在构建里标成 external (`deps.neverBundle`), 否则打包器会顺着 import 把宿主包打进来, 或者直接报错: `@deepseek-ai/dsh-client-ui-primitives` 会带进它的 `.module.css`, 报 `CSS file ... was encountered but @tsdown/css is not installed`; `@deepseek-ai/dsh-client-store` 同理. 只用于类型的包 (`-ui-settings`, `-ui-plugin-manager`, `-ui-slots`, `-ui-renderer`, `-ui-locale`) 用 `import type` 引入, 不占模块表.
+
 建议将 Host 和 Client 分开构建:
 
 - Host: ESM, 例如 `lib/index.js`.
@@ -78,6 +80,16 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 - `package.json` 的 `./client` export 指向实际的 Client 产物文件.
 
 构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.
+
+三种产物形态与各自的约束 (写 TSX 时 `tsconfig` 要开 `jsx: react-jsx`):
+
+| 形态 | 顶层注册 | 平台模块怎么拿 |
+|---|---|---|
+| tsdown banner/footer 包成 CJS (官方形态) | banner 注入 | 顶层 `import` 平台模块, 产物里变成 `require` |
+| entry 自己调 `__ModuleLoader__.load` 的 IIFE | entry 里写 | 只能经 factory 的 `require`, 组件写成工厂 + `createElement` |
+| `tsc` 直出的单文件脚本 (无打包器) | entry 里写 | 同上; 文件里不能出现任何 `import` / `export` |
+
+Client 半区常见的 devDependencies: `-ui-settings` (`ConfigForm` 类型), `-ui-primitives` (表单与控件), `-ui-plugin-manager` (SlotMap 合并, 让 `plugins.bundle.config` 这类 key 有类型), `-ui-slots` (`PropsRuntime` / `PropsLocale` / `InjectFace`), `-ui-renderer` (Context 上的 `slots` 合并), `-dsh-client-store` (`SnapshotStore`), `-dsh-client-locale` (`ctx.locale`).
 
 当 pack 包的 `devDependencies` 不被传给消费者, 而 `.d.ts` 引用了某些声明时, 关闭 `skipLibCheck` 做一次诊断类型检查, 把实际消费的声明归属包声明为直接 dev/peer 依赖, 避免 `skipLibCheck: true` 把缺失包悄悄变成 `any`.
 
@@ -98,6 +110,12 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 - package tarball 包含 Client bundle, Host bundle, 声明文件和 patch 文件.
 - 当 package 使用 `exports` 时, `require.resolve('<package>/package.json')` 可解析 (需要 `exports` 中包含 `"./package.json"`), 以便 DSH 扫描 `dsh.client` metadata.
 - 在运行中的 Web profile 中, `/plugins/<package>/client.js` 返回 Client bundle. 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
+
+Client bundle 的验证脚本要 **stub 平台模块**, 不要真的 `require` 宿主包: 它们的传递依赖 (例如 `clsx`, `zustand`) 在本仓的 `node_modules` 里不一定可解析, 会把检查变成环境问题. 断言 registration id, `inject` 列表, 以及"只请求模块表里的模块"就够了.
+
+产物内容的断言用稳定标识 (条目 id, 槽位名, 路由常量), 不要断言界面文案: 文案一改断言就挂, 而它并不能说明产物坏了.
+
+本地验证按 CI 的顺序做 (先 build 再 test). 反过来会拿上一次的产物测试, 把只有 CI 才暴露的问题留到推送之后.
 
 ## 真实组合验证
 

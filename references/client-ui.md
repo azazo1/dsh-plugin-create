@@ -41,6 +41,8 @@ ctx.effect(() => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject(
 
 Plugins 页面的配置 entry 会收到 `view` owner prop: `summary` 渲染一行简介, `page` 渲染完整表单; 离开页面会丢弃未保存的编辑, 只有保存才写入.
 
+外部插件自己的配置只放 `plugins.bundle.config` 或 `plugins.row.config`: 前者渲染在插件卡片页上 (描述与"包含的组件"之间), 后者渲染在该行详情页 (卡片页上多一个配置入口, 多一层点击). 一个包只有一份配置时用前者; 只有当这个包声明了多行, 且各行需要各自一份配置时才用后者. 注意 keyed slot 的键是**包名**(或 `<包名>#<行 id>`), 而表单寻址用的条目 id 可能不同, 见 [config.md](config.md).
+
 ## 3. 与原生风格一致
 
 先查 ui-primitives 的组件目录(`packages/client/ui-primitives/README.zh.md`): 它是跨包复用控件的唯一通道, 合适的控件直接复用, 有意的视觉差异提升成 prop, 不要另写一份. 设置表单专用的组件:
@@ -106,6 +108,9 @@ export function ExampleCard(props: ExampleCardProps) {
 - 样式用 CSS Modules 与 `--dsw-alias-*` 语义 token(`ui-theme` 拥有 token 与全局样式表): 不写字面颜色, 不引入组件库或 Tailwind, 不覆盖主题选择器. 中性分隔线用 0.5px hairline, 行内节奏通常是 `padding: 16px 0`, `gap: 8px`, 行底部 `0.5px solid var(--dsw-alias-border-l2)`(General 分区会去掉最后一条).
 - 设置面板的宽度与内边距由 shell 拥有(当前 800px), 页面不要自己设 `max-width`.
 - `.module.css` 与 `.css` 的注入由 Client 构建预设完成(`data-plugin-css` 标记), 不要手写 `<style>` 注入.
+- 官方字段控件只覆盖单行文本, 数字与密文三类. 布尔, 选择, 多行文本, 颜色这类字段需要自绘控件, 但仍然放进 `SettingsForm` 里, 并复刻官方字段行的节奏: 标签 13px/500, 说明 12px tertiary, `已覆盖` 标记与 `恢复默认` 靠右, 每行 `padding: 12px 0`, 行间 `0.5px solid var(--dsw-alias-border-l2)`. 官方 primitives 里可直接复用的控件有 `Switch`, `Menu`, `Tag`, `Button`, `Input`, `SegmentedControl`.
+- 自绘控件的样式作用域要跟着落点走. 从旧设置页搬过来的 CSS 常带 `[data-my-plugin]` 一类的作用域选择器, 落点换成插件卡片后那个根元素并不存在, 规则会全部失配: 界面看起来是裸文本 (标签没有字号, 输入框是浏览器默认样式), 而不是 "样式有点不同". 搬迁时要么去掉作用域, 要么把根元素一起搬.
+- `SettingsFormModel` 的字段名只映射到顶层一段路径, 嵌套对象 (`colors.<类别>`) 与字典 (`toolColors.<工具名>`) 用它寻址不到. 这类配置要么把 schema 拍平成顶层字段, 要么自写暂存层, 保存时用 `mutate([{ op: 'set', path: ['colors', 'search'], value }])` 按路径批量写 (Host 侧 `isVolatilePath` 允许 volatile 子树下的任意路径).
 
 ## 4. Client module loader
 

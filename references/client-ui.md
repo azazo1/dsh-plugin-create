@@ -1,168 +1,113 @@
 # Client UI
 
-## 1. General 设置项
+Client 半区负责展示与编辑 Host 的配置. 值来自 profile 条目表单, 界面用共享控件拼装, 与原生设置页保持一致.
 
-单个偏好项应注册到 `settings.general.item`, 不要修改 `ui-settings-general` 插件本身:
+## 1. 数据面: `ctx.configForms`
+
+声明 `configForms` 依赖, 用条目 id 拿共享表单:
 
 ```ts
-ctx.slots.inject('settings.general.item', () => ctx.slots.register(
-  {
-    name: 'settings.general.item',
-    id: 'dsh-example-message',
+export const inject = ['slots', 'locale', 'configForms']
+
+const form = ctx.configForms.get<ExampleSettings>(ENTRY_ID)
+```
+
+`ConfigForm<T>` 的契约:
+
+- `getSnapshot()` 返回 `{ status, value, base, user, revision, writable, mode }`. `status` 在首个可接受 section 到达前是 `loading`; `base` 是清除某字段后回落到组合层; `user` 里字段的**存在性**(不是值相等)才表示被覆盖; `writable` 决定是否可写.
+- `set(field, value)` / `unset(field)` 排队单字段写入, `mutate(ops, expectedRevision?)` 一次原子写入多个路径操作; 带修订号可以拒绝并发覆盖, 被 Host 拒绝时会回读最新值.
+- 同一浏览器里同一条目 id 只有一份表单实例, 多个页面共享它.
+
+页面只在 Host 真的组合了该条目时才出现, 用 `whileServed` 包注册:
+
+```ts
+ctx.effect(() => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject(/* ... */)))
+```
+
+其他跨命名空间面: `ctx.configForms.describe()` 读共享镜像(被服务的命名空间目录), `ctx.settingsSchema` 重建 schema 用于校验草稿.
+
+组件永远不自己订阅外部数据, 也不自己管配置状态: 数据通过 slot 注册的 store 或 inject 的 `hooks` 隔间到达组件, 写操作通过注入的 actions 调用. 详见第 3 节.
+
+## 2. 注册位置
+
+| slot | 用途 | 备注 |
+|---|---|---|
+| `settings.general.item` | General 里的一行 | owner props 为空, 行自己画标题, 描述与控件 |
+| `settings.section` | 设置面板里的独立页 | 注册选项带 `id`, `order`, `label`; 页面收到 `close` |
+| `settings.plugins.tab` | 内置插件分区里的一个 tab | 只在需要 tab 入口时使用 |
+| `plugins.item` | 官方插件列表里的卡片与其配置页 | 由官方配置页占用, 外部插件不要注册 |
+| `plugins.bundle.config` | 某个 bundle 自己的配置页 | keyed slot, 键等于包名 |
+| `plugins.row.config` | 某个 row 的配置页 | keyed slot, 键为 `<包名>#<row id>` |
+
+Plugins 页面的配置 entry 会收到 `view` owner prop: `summary` 渲染一行简介, `page` 渲染完整表单; 离开页面会丢弃未保存的编辑, 只有保存才写入.
+
+## 3. 与原生风格一致
+
+先查 ui-primitives 的组件目录(`packages/client/ui-primitives/README.zh.md`): 它是跨包复用控件的唯一通道, 合适的控件直接复用, 有意的视觉差异提升成 prop, 不要另写一份. 设置表单专用的组件:
+
+- `SettingsForm`: 整页表单框架, 接收 `labels`, `state`, `onSave`, `onDiscard` 与控件子节点; 不可写时显示只读提示, 卸载即丢弃草稿.
+- `SettingsValueField` / `SettingsSecretField`: 单字段控件, 显示暂存文本, 已覆盖标记与重置; 密文字段每次为空, 只报告是否已配置.
+- `SettingsFormModel` + `settingsTextField` / `settingsNumberField`: 暂存编辑模型, 保存时才把草稿写成一个带修订号的写入.
+
+一个最小整页实现见官方 shell 配置页 `packages/client/ui-settings-shell/`(整个包只有三个文件):
+
+```ts
+export const inject = ['slots', 'locale', 'configForms']
+
+export function apply(ctx: Context): void {
+  const t = ctx.locale.bind(NS)
+  ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'example: dictionaries')
+  const form = new SettingsFormModel(ctx.configForms.get<ExampleSettings>(ENTRY_ID), [settingsTextField('message')])
+  const store = form.bind(() => ({ ...form.shell(), message: form.field('message') }))
+  ctx.effect(() => () => { form.dispose() }, 'example: form subscription')
+  ctx.effect(() => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
+    name: 'plugins.item',
+    id: 'example',
     order: 100,
-  },
-  ExampleSettingRow,
-))
+    label: () => t('title'),
+    locale: NS,
+    inject: () => ({ hooks: { exampleCard: store }, ...form.actions() }),
+  }, ExampleCard))), 'example: settings page')
+}
 ```
 
-`settings.general.item` 的 owner 不会自动提供 label, value 或写入逻辑. 配置插件必须自己渲染这些内容并使用已经绑定的 scope.
-
-只注入实际使用的服务, 通常包括:
-
-```ts
-inject: ['settingsScope', 'slots']
-```
-
-不要额外依赖 `@deepseek-ai/dsh-client-ui-settings-general`. General shell 会提供 slot 的渲染位置.
-
-## 2. 独立配置页
-
-当插件拥有多个相关配置项, 需要独立标题, 描述, 分组或保存操作时, 使用 `settings.section`. 不要把完整页面压缩成 `settings.general.item`, 后者只适合 General 中的一行偏好项.
-
-独立页面注册为 `settings.section` 的 list entry. `id` 必须使用插件自己的唯一值, `order` 控制设置导航位置, `label` 是导航显示文本:
-
-```ts
-ctx.slots.inject('settings.section', () => ctx.slots.register(
-  {
-    name: 'settings.section',
-    id: 'dsh-example',
-    order: 100,
-    label: 'Example Plugin',
-  },
-  (props) => createElement(ExampleSettingsPage, props),
-))
-```
-
-页面组件会收到设置 shell 提供的 `close` 回调. 页面只负责自己的内容, 不要替换 `settings` shell, 导航栏或关闭按钮:
+组件从 props 读取:
 
 ```tsx
-function ExampleSettingsPage(props: { close: () => void }) {
-  return createElement(
-    'section',
-    { className: styles.section },
-    createElement('h2', null, 'Example Plugin'),
-    createElement('p', { className: styles.intro }, 'Configure the plugin.'),
-    createElement(ExamplePluginCard),
+export function ExampleCard(props: ExampleCardProps) {
+  const state = props.useExampleCard(snapshot => snapshot)
+  if (props.view === 'summary') return props.t('description')
+  return (
+    <SettingsForm labels={formLabels(props.t)} state={state} onSave={props.save} onDiscard={props.discard}>
+      <SettingsValueField
+        id="plugin-config-example-message"
+        label={props.t('message')}
+        hint={props.t('messageHint')}
+        overriddenLabel={props.t('overridden')}
+        resetLabel={props.t('reset')}
+        invalidLabel={props.t('invalid')}
+        disabled={!state.writable}
+        {...state.message}
+        onEdit={text => { props.edit('message', text) }}
+        onReset={() => { props.resetField('message') }}
+      />
+    </SettingsForm>
   )
 }
 ```
 
-独立页面的推荐内容结构与 DSH Plugins 设置页保持一致:
+只注册一行偏好时用 `settings.general.item`, 注册选项用 `{ name, id, order, store, locale, inject }`, 行自己画标题与控件. 现成样例: `packages/client/ui-theme/src/client/FontSizeRow.tsx`(store 形式)与 `packages/client/locale/src/client/LanguageRow.tsx`.
 
-- 页面容器使用 `max-width: 760px`, `display: flex`, `flex-direction: column` 和 `gap: 12px`.
-- 页面标题使用 `18px`, `font-weight: 600`, 描述使用 `13px` 和 `var(--dsw-alias-label-tertiary)`.
-- 多个相关设置放入插件卡片, 卡片使用 `var(--dsw-alias-bg-layer-3)`, `var(--dsw-alias-border-l2)` 和 `border-radius: 12px`.
-- 卡片字段使用上下 `12px` 内边距, 字段之间使用顶部 `1px solid var(--dsw-alias-border-l2)` 分隔.
-- 文本输入框使用 `height: 34px`, `padding: 0 12px`, `border-radius: 8px`, `background: var(--dsw-alias-bg-layer-3)` 和 `font-size: 13px`.
-- 输入框的 `:focus-visible` 使用 `var(--dsw-alias-brand-primary)` 边框, 不使用无主题的固定颜色.
-- 保存和重置操作放在卡片底部, 使用 `border-top`, `padding: 12px 0 4px` 和 `gap: 8px`.
-- 页面需要兼容窄屏, 操作区允许换行, 状态文本不能挤压按钮.
+硬性约束:
 
-正式插件的配置页面应绑定 `settingsScope`, 由 Host settings namespace 提供默认值, 读取和持久化. 不要在组件内部创建会绕过 Host 的全局配置状态:
+- 数据通道只有三种: 父级在 renderSlot 处传的 owner props, 组件本地状态, 以及注册时声明的 store / inject `hooks`. 组件里不写 `useSyncExternalStore`, 不手动订阅, 不把外部快照镜像进本地状态.
+- store 用导出的 `createXXXStore()` 工厂创建, 组件读 `props.useStore`, 写 `props.actions.*`; 模块级句柄是隐式单例, 禁止.
+- 所有用户可见字符串走 typed locale 字典: `ctx.locale.register(NS, { zh, en })`, 注册时带 `locale: NS`, 组件用 `t` seat. 不要把文案硬编码在组件里.
+- 样式用 CSS Modules 与 `--dsw-alias-*` 语义 token(`ui-theme` 拥有 token 与全局样式表): 不写字面颜色, 不引入组件库或 Tailwind, 不覆盖主题选择器. 中性分隔线用 0.5px hairline, 行内节奏通常是 `padding: 16px 0`, `gap: 8px`, 行底部 `0.5px solid var(--dsw-alias-border-l2)`(General 分区会去掉最后一条).
+- 设置面板的宽度与内边距由 shell 拥有(当前 800px), 页面不要自己设 `max-width`.
+- `.module.css` 与 `.css` 的注入由 Client 构建预设完成(`data-plugin-css` 标记), 不要手写 `<style>` 注入.
 
-```ts
-const scope = ctx.settingsScope.bind({
-  namespace: SETTINGS_NAMESPACE,
-  decode: decodeExampleSettings,
-})
-```
-
-## 3. 插件配置面 (Plugins 页面)
-
-web client 的 Plugins 页面 (侧边栏 Plugins 入口) 是插件配置的承载面, 提供三个 slot:
-
-- `plugins.bundle.config`: keyed slot, 键等于插件包名, 渲染在该 bundle 自己的页面上, 位于描述和 row 列表之间.
-- `plugins.row.config`: keyed slot, 键为 `<包名>#<row id>`, row id 是 bundle patch 声明的 id; 注册后该 row 在 bundle 页面上出现一个 configure 入口, 点开进入以 row id 为标题的配置页.
-- `plugins.item`: list slot, 官方插件组的卡片, 由官方配置页占用, 外部插件不要注册.
-
-每个 entry 会收到 `view` owner prop (`'summary' | 'page'`): `summary` 渲染一行简介文本, `page` 渲染完整表单. 表单离开页面时丢弃未保存的编辑, 只有保存才写入. 以 `plugins.bundle.config` 为例:
-
-```ts
-ctx.slots.inject(
-  'plugins.bundle.config',
-  () => ctx.slots.register(
-    {
-      name: 'plugins.bundle.config',
-      key: SETTINGS_NAMESPACE,  // 键等于插件包名
-      order: 100,
-      inject: () => ({ scope }),
-    },
-    (props) => createElement(props.view === 'page' ? ExampleConfigForm : ExampleConfigSummary, props),
-  ),
-)
-```
-
-接入要点:
-
-- Host 半区通过 `settings` service 注册同名 namespace schema (见 [config.md](config.md) 第 9 节).
-- 表单通过声明的 schema 读取 / 更新, 而不是 ad-hoc 文件.
-- 只注册实际需要的服务, 保持 client bundle 轻量.
-
-如果只需要一个设置 tab 入口, 也可以在 Settings 的 Plugins 分区里注册 `settings.plugins.tab` (list slot, `id` 为 tab key, `label` 为 tab 文本), 把页面内容渲染成该分区里的一个 tab.
-
-## 4. React 组件和 scope
-
-设置组件必须订阅 scope, 这样 Host 或其他设置面板写入后输入框仍然会更新:
-
-```ts
-const value = React.useSyncExternalStore(
-  (onChange) => scope.subscribe(onChange),
-  () => scope.getSnapshot().value?.message ?? DEFAULT_MESSAGE,
-)
-```
-
-输入事件使用 `scope.set` 写回 Host:
-
-```ts
-onChange: (event) => {
-  void scope.set(MESSAGE_FIELD, event.currentTarget.value)
-}
-```
-
-Client factory 需要从 module loader 的 `require` 获取 React. React 应作为 peer dependency, 不要复制或打包一份新的 React runtime:
-
-```ts
-factory: (require) => {
-  const React = require('react')
-  // createElement and useSyncExternalStore are used by the row.
-}
-```
-
-## 5. 样式
-
-General 设置行默认必须使用 DSH 原生配置样式, 不得使用无主题 token 的最简 inline 布局代替. 即使设置项只有一个字段, 也必须提供与 General Settings 一致的分隔, 标签, 输入, hover, focus 和窄屏状态.
-
-- 使用 `display: flex`, `gap: 8px` 和 `padding: 16px 0`.
-- 使用 `var(--dsw-alias-label-primary)`, `var(--dsw-alias-label-tertiary)` 和现有 border token.
-- 输入框可以使用 `var(--dsw-alias-bg-module-platform)`, 圆角 `18px`, 高度 `36px`.
-- 使用 `:hover` 和 `:focus` 状态, focus 边框应使用业务主色 token.
-- 自定义设置行的分割线放在行底部. 对位于现有项目之后的自定义行, 使用 `border-bottom: 1px solid var(--dsw-alias-border-l2)`. 不要改为顶部分割线.
-- 不要使用随意的纯色, 大块卡片或与 DSH 主题无关的视觉样式.
-- 窄屏时应切换为上下布局, 输入框宽度使用 `100%`.
-
-CSS 可以在 Client bundle 初始化时注入一次, 并通过 `data-plugin-css` 标记避免重复插入:
-
-```ts
-const styleId = 'dsh-example-settings-row'
-if (typeof document !== 'undefined' && !document.querySelector(`style[data-plugin-css="${styleId}"]`)) {
-  const style = document.createElement('style')
-  style.dataset.pluginCss = styleId
-  style.textContent = CSS_TEXT
-  document.head.appendChild(style)
-}
-```
-
-## 6. Client module loader
+## 4. Client module loader
 
 DSH Web Client 不加载普通 ESM 作为插件 Client entry. Client bundle 必须在顶层注册插件 ID:
 
@@ -170,15 +115,15 @@ DSH Web Client 不加载普通 ESM 作为插件 Client entry. Client bundle 必�
 window.__ModuleLoader__.load({
   id: 'dsh-example',
   factory: (require) => ({
-    inject: ['settingsScope', 'slots'],
+    inject: ['slots', 'locale', 'configForms'],
     apply(ctx) {
-      // bind scope, log or register slots
+      // 绑定表单, 注册 slot
     },
   }),
 })
 ```
 
-`id` 必须和 `package.json` 的插件名完全一致. 否则加载会报错:
+`id` 必须和 `package.json` 的插件名完全一致, 否则加载会报错:
 
 ```text
 client-modules: bundle <url> loaded without registering "<id>" via __ModuleLoader__.load
@@ -186,53 +131,17 @@ client-modules: bundle <url> loaded without registering "<id>" via __ModuleLoade
 
 三个标识必须一致, 以 `package.json` 的 `name` 为基准:
 
-1. Client bundle 的 registration id (`__ModuleLoader__.load` 的 id, 通常由 tsdown banner `PLUGIN_ID` 注入) == `package.json` 的 `name`.
-2. assembly row (插件自己的 `cordis.patch.yml` 或 home patch 里的 insert row) 的 `name` 使用裸包名 (带 scope, 例如 `'@dsh-external/dsh-input-history'`).
+1. Client bundle 顶层注册的 id(通常由构建 banner 注入) == `package.json` 的 `name`.
+2. assembly row 的 `name` 使用包名(带 scope, 例如 `'@alice/dsh-example'`).
 3. `dsh --profile <name> --dump-config` 检查 row 名且无 pending.
 
-任何一处不一致都会导致 client 半区静默缺席 boot graph: 要么加载时报 `loaded without registering`, 要么面板静默消失而日志无插件相关错误. 浏览器半区的注册失败会进入 load report, 用 `cordis_inspect what:"temporary"` 读取. 安装后验证 profile 的 `dsh.profile.bundles` 包含插件名.
+任何一处不一致都会让 client 半区静默缺席 boot graph. 浏览器半区的注册失败会进入 load report, 在 Settings -> Plugins 的插件列表里可以看到, 也可以用 `cordis_inspect_list` / `cordis_inspect_query`(需要 provider 与 method)诊断.
 
-Client entry 还必须是浏览器脚本, 不能保留顶层 ESM `import` 或 `export`. 最简单的构建方式是将 Client 单独输出为 IIFE, Host 入口单独输出为 ESM:
+Client entry 必须是浏览器脚本, 不能保留顶层 ESM `import` 或 `export`. 官方形态是把 Client 输出成 `lib/client.js`: CJS 包装加 banner/footer 注入 `__ModuleLoader__.load({ id, factory })`, 并由 `dsh.client` 声明送出; 自建构建时用 IIFE 达到同样效果也可以, 只要顶层完成注册. 构建配置见 [build-and-test.md](build-and-test.md).
 
-```ts
-// tsdown.host.config.ts
-export default defineConfig({
-  entry: 'src/index.ts',
-  format: ['esm'],
-  outDir: 'lib',
-  dts: true,
-  clean: true,
-})
+## 5. 验证
 
-// tsdown.client.config.ts
-export default defineConfig({
-  entry: 'src/client/index.ts',
-  format: ['iife'],
-  outDir: 'lib',
-  clean: false,
-})
-```
-
-对应的 `package.json` Client export 应指向 IIFE 文件:
-
-```json
-{
-  "exports": {
-    "./client": {
-      "types": "./lib/index.d.ts",
-      "default": "./lib/index.iife.js"
-    }
-  }
-}
-```
-
-构建后应检查 Client 文件开头没有 `import`, 末尾没有 ESM `export`, 并且包含正确的 `__ModuleLoader__.load({ id: ... })` 注册.
-
-## 7. 验证
-
-- 索引页 HTML 的 `window.__DSH_BOOT__.entries` 包含 `"id":"<package name>"`.
-- 从组合路由 `/plugins/??<package name>/client.js&rev=...` 拉取的脚本 (URL 含 `??`; curl 需加 `-g`) 包含 `__ModuleLoader__.load({ id: "<package name>"`.
-- 启动日志没有 `loaded without registering` / boot activation audit 报错.
-- `/plugins/<package>/client.js` 返回 Client bundle; 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
-
-修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.
+- 索引页的 `window.__DSH_BOOT__.entries` 包含 `"id":"<package name>"`.
+- `/plugins/<package>/client.js` 返回 Client bundle, 且内容含 `__ModuleLoader__.load({ id: "<package name>"`; 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
+- 启动日志没有 `loaded without registering` 或 boot activation audit 报错.
+- 改过 bundle metadata, Client export 或 Client bundle 后重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.

@@ -21,7 +21,7 @@ plugin/
 - `package.json` 的 `main` 和 `exports` 应指向 `lib/` 中的产物.
 - 不要在 `src/` 中直接维护发布用的 JavaScript 文件.
 - `lib/` 属于发布内容时, 应在构建后检查并纳入 npm package files.
-- 不要将 `lib/` 添加到 `.gitignore`, 以便构建产物可以被检查和发布.
+- 外部插件仓库需要提交 `lib/`, 以便 git 方式安装直接拿到构建产物, 因此不要把 `lib/` 加进 `.gitignore`; 官方 monorepo 相反, 它忽略 `lib/` 并在发布流水线里构建.
 
 ## Manifest 与 Profile 激活
 
@@ -41,6 +41,7 @@ plugin/
 ```
 
 - `dsh.bundle` 声明这是一个 bundle 插件, 安装通过 `dsh plugin --profile web add <pkg>` 进入 `dsh.profile.bundles` layer stack, 修改后需要重启 `dsh web`.
+- bundle patch 里插入的 row `id` 同时是这个插件配置表单的命名空间, 也是用户在 profile 的 `cordis.patch.yml` 里按 id 覆盖 config 的键(见 [config.md](config.md)).
 - 普通 Cordis 插件 (无 client 半区) 通过 `dsh plugin --profile web add <pkg>` 加一个 `cordis.patch.yml` insert row 即可, 配置级 HMR 实时挂载, 无需重启.
 - `dsh.client` 声明 client 半区: `platform: 'web'` 必填, `inject` (依赖的其他包行), `external` (非注入的模块请求) 和 `immediately` (启动一级预取) 可选. client-modules 只扫描声明了 `dsh.client` 的包; 声明了 `dsh.bundle` 但没有 `dsh.client` 的包永远不会进入浏览器插件名册, client UI 缺席且 Node 半区无任何报错.
 

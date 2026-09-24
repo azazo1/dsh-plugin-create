@@ -1,8 +1,8 @@
 # Naming
 
-外部插件的公开标识符 (包名, 插件模块名, service, tool, command, skill, settings namespace, 事件, 路由) 是社区兼容性面. 本参考是社区兼容性 profile, 不是官方标准; 选择公开标识符前先读本文, 为每个新的外部插件创建 `dsh-plugin.naming.json` 并运行离线校验.
+外部插件的公开标识符 (包名, 插件模块名, service, tool, command, skill, 配置表单命名空间, 事件, 路由) 是社区兼容性面. 本参考是社区兼容性 profile, 不是官方标准; 选择公开标识符前先读本文, 为每个新的外部插件创建 `dsh-plugin.naming.json` 并运行离线校验.
 
-不要仅仅为了通过推荐项就重命名已发布的公开名称. 工具, 命令, service, skill, settings namespace, 事件或路由的重命名都是兼容性变更.
+不要仅仅为了通过推荐项就重命名已发布的公开名称. 工具, 命令, service, skill, 配置表单命名空间, 事件或路由的重命名都是兼容性变更.
 
 ## 1. 官方基线与社区建议
 
@@ -19,7 +19,7 @@ DSH 使用多个相互独立的身份, 而不是一个通用插件 ID:
 | Skill name | 官方语法是 kebab-case; scope, rank, provider 顺序和本地顺序决定胜者 | 建议带发布者的 kebab 前缀 |
 | Skill provider | 同 scope 的 provider 名必须唯一; `runtime` 是官方保留名 | 单独声明 provider, 不要与 Skill 名混在一起 |
 | Event | 官方自定义事件遵循 `namespace/action`; 事件是共享通道, 不是独占注册 | 建议带发布者的 namespace, 不声称拥有该通道 |
-| Settings namespace | 官方语法是 `^[a-z][a-z0-9-]*$`; 重复注册失败 | 建议带发布者的 kebab 前缀 |
+| Config form namespace | 表单按 profile 条目 id 寻址(`ctx.fiber.entry?.options.id`); 不再有独立的 namespace 注册 | 建议让 bundle patch 的 row id 带发布者的 kebab 前缀 |
 | Web route | HTTP 路由只对相同 `kind` 和 `path` 冲突; exact, prefix 和 upgrade 注册各不相同 | 记录 `{ kind, path }`, 不要丢失路由 kind |
 
 社区坐标是 `<namespace>/<plugin>`, 例如 `alice/web-search`. 它是可选社区注册表的查找键, 不替代任何官方 DSH 字段.
@@ -55,23 +55,23 @@ DSH 使用多个相互独立的身份, 而不是一个通用插件 ID:
 }
 ```
 
-保留每个数组, 包括空数组, 并至少声明一个插件模块名和一个 Loader row ID. 可选的 `$schema` 字段可以指向 `plugin-naming.schema.json` 的可解析本地副本. 该声明补充 `package.json`, bundle patch 和 Profile composition; 它既不证明源码使用, 也不保留名称.
+保留每个数组, 包括空数组, 并至少声明一个插件模块名和一个 Loader row ID. `settingsNamespaces` 记录配置表单的命名空间, 也就是 bundle patch 里那条 row 的 `id`(见 [config.md](config.md)). 可选的 `$schema` 字段可以指向 `plugin-naming.schema.json` 的可解析本地副本. 该声明补充 `package.json`, bundle patch 和 Profile composition; 它既不证明源码使用, 也不保留名称.
 
 ## 3. 离线校验
 
-用 Node 20 或更新版本运行只读校验器:
+校验器脚本由 `dsh-plugin-upgrade-skill` 的 `plugin-write` 子技能提供, 不在本技能目录内. 用 Node 20 或更新版本运行只读校验器:
 
 ```sh
-node <plugin-write-skill>/scripts/validate-names.mjs \
+node ~/.dsh/skills/dsh-plugin-upgrade-skill/skills/plugin-write/scripts/validate-names.mjs \
   --manifest ./dsh-plugin.naming.json
 ```
 
-对新插件如果采纳所有社区建议, 加 `--strict`. CI 中使用 `--format json`. 退出码 `0` 表示兼容, `1` 表示错误或 strict 模式警告, `2` 表示无效参数, 不可读输入或损坏的 JSON. 校验器不发起网络请求, 不写文件.
+如果技能装在别处, 换成那个 `plugin-write` 目录的实际路径. 对新插件如果采纳所有社区建议, 加 `--strict`. CI 中使用 `--format json`. 退出码 `0` 表示兼容, `1` 表示错误或 strict 模式警告, `2` 表示无效参数, 不可读输入或损坏的 JSON. 校验器不发起网络请求, 不写文件.
 
 校验通过后, 如果公共网络可用, 可再查询中心注册表 (可选, 只读):
 
 ```sh
-node <plugin-write-skill>/scripts/query-registry.mjs \
+node ~/.dsh/skills/dsh-plugin-upgrade-skill/skills/plugin-write/scripts/query-registry.mjs \
   --manifest ./dsh-plugin.naming.json \
   --harness-version <当前 dsh 版本>
 ```

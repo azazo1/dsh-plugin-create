@@ -59,7 +59,7 @@ DSH Web Client bundle 使用 `window.__ModuleLoader__` 的懒加载模块表, �
 window.__ModuleLoader__.load({
   id: 'dsh-example',
   factory: (require) => ({
-    inject: ['settingsScope', 'slots'],
+    inject: ['slots', 'locale', 'configForms'],
     apply(ctx) {
       // plugin body
     },
@@ -74,7 +74,7 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 建议将 Host 和 Client 分开构建:
 
 - Host: ESM, 例如 `lib/index.js`.
-- Client: 浏览器目标, 例如 `lib/client.js` (官方 client bundle 使用 CJS 包装 + banner/footer 注入 `__ModuleLoader__.load`, 外部插件用 IIFE 等价实现).
+- Client: 浏览器目标, 输出到 `lib/client.js`. 官方 client bundle 使用 CJS 包装 + banner/footer 注入 `__ModuleLoader__.load({ id, factory })`, 外部插件用 IIFE 达到同样效果即可; 无论哪种形态, 顶层都必须完成注册, 并在 `dsh.client` 声明 `platform: 'web'` 与 Client 入口.
 - `package.json` 的 `./client` export 指向实际的 Client 产物文件.
 
 构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.

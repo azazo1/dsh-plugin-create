@@ -12,7 +12,7 @@ DSH 插件是注册到 Cordis Context 上的能力包. 创建插件前先确定�
 | 新的模型提供商 | LLM adapter plugin | 注册到 `ctx.llm` |
 | 请求, 工具或 turn 拦截 (权限, 策略, 指标, 遥测) | Hook plugin | 监听 `tools/*` 或 `agent/*` 事件 |
 | 其他插件通过 `ctx` 消费的能力 | Service plugin | 继承 `Service` 类注册服务 |
-| 通过 `cordis.yml` 提供的用户可配置行为 | Config plugin | 导出 `Config` 类型和同名 Schema |
+| 通过组合 patch 层提供的用户可配置行为 | Config plugin | 导出 `Config` 类型和同名 Schema |
 
 ## 2. 目标与机制
 
@@ -32,7 +32,7 @@ DSH 插件是注册到 Cordis Context 上的能力包. 创建插件前先确定�
 | 添加 UI 或编辑器集成 | 驱动 `ctx.agents` 并从 `session/event` 渲染 |
 | 添加 Web 客户端对话节点 | 注册 `ConversationNodeDefinition` 和 keyed renderers |
 | 添加持久化会话状态 | 扩展 `SessionEventMap`, 然后从日志渲染和回放 |
-| Fork 一个活动会话 | 调用 `ctx.sessions.fork(source, boundary?, childSessionId?)` |
+| Fork 一个活动会话 | 调用 `ctx.sessions.fork({ sessionId, atSeq? })` |
 | 将注册限定到单个 Agent | 使用该 Agent 的 `agent.ctx` |
 
 ## 3. Tool Plugin
@@ -150,20 +150,20 @@ export default class MetricsService extends Service {
 
 ## 6. Config Plugin
 
-接受用户通过 `cordis.yml` 提供的配置:
+接受部署方与用户在组合 patch 层提供的配置:
 
 ```ts
-import type { Context } from '@deepseek-ai/cordis'
+import type { Context, Volatile } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 
 export interface Config {
-  greeting: string
+  greeting: Volatile<string>
   maxRetries: number
   verbose?: boolean
 }
 
 export const Config: Schema<Config> = Schema.object({
-  greeting: Schema.string().default('Hello'),
+  greeting: Schema.string().default('Hello').volatile(),
   maxRetries: Schema.number().default(3),
   verbose: Schema.boolean().default(false),
 })
@@ -175,8 +175,9 @@ export function apply(ctx: Context, config: Config) {
 
 - 不要硬编码可调值. 两个部署可能设置不同值的字段必须是配置字段.
 - 无效配置必须显式失败, 在插件加载时报出可操作的错误, 不要静默跳过.
-- 凭据不能成为配置值. 使用目标 Schemastery 包的环境变量回退, 通过 `!!js process.env.MY_KEY` 传入 `cordis.yml`, 或使用按操作解析的命名凭据引用.
-- 配置变更自动触发 HMR: 框架卸载旧实例并加载新实例, 旧实例的注册作为 effect 自动清理.
+- 凭据字段用 `.role('secret')` 声明(表单脱敏, 值不出现在 describe 响应), 引用外部凭据用 `.role('credential-ref')` 并在操作时通过 `ctx.credentials` 解析; 不要把凭据当普通字符串字段.
+- 只有普通字段变化才触发重挂载: 框架卸载旧实例并加载新实例, 旧实例的注册作为 effect 自动清理. 标了 `.volatile()` 的字段变化不重挂载, 只把新值提交进运行中的引用并发出 `loader/volatile-update`.
+- 字段放置规则, profile 条目 id 与表单读写见 [config.md](config.md).
 
 ## 编写规则
 

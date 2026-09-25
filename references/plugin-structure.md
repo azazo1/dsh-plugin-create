@@ -65,6 +65,20 @@ plugin/
 
 缺少该 export 时, Client 扫描器无法读取 manifest, 会将插件静默视为非 Client 插件, `/plugins/<package>/client.js` 不会发布. 安装后检查 profile 的 `dsh.profile.bundles` 包含插件名. 修改 bundle metadata, Client export 或 Client bundle 后, 重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.
 
+## 引擎版本声明与兼容性 preflight
+
+插件 `package.json` 的 `peerDependencies` 是 DSH 判断兼容性的唯一入口: 启动与安装时 `evaluatePluginCompatibility` 只看这一处, 凡是名字为 `@deepseek-ai/dsh` 或以 `@deepseek-ai/dsh-` 开头的项, 都用 `semver.satisfies(宿主版本, 范围, { includePrerelease: true })` 逐个判定. 只要有一项不满足, 整个包就按不兼容处理: 安装被拒, 已经装上的 bundle 在启动时被跳过.
+
+由此有三条硬规则:
+
+- 不要精确钉某个发布版本. 写 `0.1.7-rc.1` 的插件在 `0.1.7-rc.2` 宿主上会被判为不满足, 即使两次发布之间没有插件可见的 API 变化. 写成 `>=0.1.7-rc.2 <0.2.0` 这样的范围, peerDependencies 与 devDependencies 同号对齐.
+- 预发布版本参与比较 (`includePrerelease: true`), 所以范围下限要写成宿主实际发布的版本号 (例如 `>=0.1.7-rc.2`), 不要用 `^0.1.7` 这类在预发布线上容易落空的写法.
+- `devDependencies` 不参与判定, 但应与 peer 写法一致, 避免本地开发装到与判定不同的版本线.
+
+`workspace:^`, `workspace:~`, `workspace:*` 会被当成本次运行的宿主版本, 只适用于与宿主同仓库构建的第一方插件.
+
+被拒时可以用精确豁免放行: `dsh plugin --profile <profile> allow-version <name>@<version> --dsh-version <runtime> --accept-risk`, 或在插件管理器里对那一条授权. 豁免按 `<包名>@<版本>` 与宿主版本的精确组合生效, 只是让部署方显式接受风险, 不能替代把版本范围写对.
+
 ## 轻量化原则
 
 插件应优先使用 DSH 已提供的服务, UI primitives 和运行时能力. 能用标准 API 或少量本地代码解决的问题, 不引入大型框架或重复实现的基础设施.
@@ -90,6 +104,8 @@ gh repo create OWNER/REPOSITORY --public \
 description 应简短说明插件解决的问题和主要使用场景, 不要只写技术实现或空泛的项目名称. 包名, `--description`, `package.json` 的 `description` 和 README 开头的定位说明应保持一致.
 
 ## Plugin Installation Source
+
+web 与 desktop 两个宿主接受同样的安装来源, 差异只在谁能执行安装命令, 见 [dual-host.md](dual-host.md).
 
 使用 DSH 添加插件时, GitHub 仓库优先使用 `OWNER/REPOSITORY` 或 `OWNER/REPOSITORY#REF` 形式:
 

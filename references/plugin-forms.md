@@ -147,6 +147,7 @@ export default class MetricsService extends Service {
 - `inject` 列出必需服务; 不要把可选依赖放进 `inject`, 在调用处用 `ctx.get('name')` 查询并守卫缺失结果.
 - 用 TypeScript declaration merging 在目标 Cordis `Events` 接口上定义类型化事件, 事件名使用 `namespace/action`, 用 `@mode` 文档化分发模式 (`emit`, `bail`, `serial`, `waterfall`).
 - `turn/*`, `step/*`, `tool/call`, `tool/result`, `compact/*` 是持久化 session event 类型, 不是同名 Cordis 事件. 观察它们要监听 `session/event` 并检查 `event.type`.
+- 0.1.7-rc.2 起 agent loop 自己会往会话日志追加 `developer/message`: 每步对比前一请求头里的工具名, 把工具增删写成 `source.kind='tool-registry'` 的 context 行 (`tool-addition` / `tool-removal`). 遍历会话事件时要把这类框架追加的行与用户内容区分开.
 
 ## 6. Config Plugin
 

@@ -51,6 +51,8 @@ just verify
 
 新增大型依赖时, 应在变更说明中记录替代方案, 体积和启动影响, 许可证, 维护状态以及为什么不能使用更轻量的实现. 测试依赖和运行时依赖分开声明, 能放入 `devDependencies` 的不放入运行时依赖.
 
+`@deepseek-ai/dsh*` 依赖统一写范围而不是精确版本: 宿主升级后, 精确钉旧版本的插件会被兼容性 preflight 拒装, 详见 [plugin-structure.md](plugin-structure.md) 的引擎版本声明一节.
+
 ## Web Client 特殊构建
 
 DSH Web Client bundle 使用 `window.__ModuleLoader__` 的懒加载模块表, 不是普通浏览器 ESM. Client 入口需要在顶层执行:

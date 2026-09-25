@@ -43,6 +43,10 @@ Plugins 页面的配置 entry 会收到 `view` owner prop: `summary` 渲染一�
 
 外部插件自己的配置只放 `plugins.bundle.config` 或 `plugins.row.config`: 前者渲染在插件卡片页上 (描述与"包含的组件"之间), 后者渲染在该行详情页 (卡片页上多一个配置入口, 多一层点击). 一个包只有一份配置时用前者; 只有当这个包声明了多行, 且各行需要各自一份配置时才用后者. 注意 keyed slot 的键是**包名**(或 `<包名>#<行 id>`), 而表单寻址用的条目 id 可能不同, 见 [config.md](config.md).
 
+注册进 list 槽时 `id` 在同一个槽里必须唯一: 与官方已占用的 id 撞名会直接抛错, 整个 client bundle 加载失败 (不是只有那一行不显示). 0.1.7-rc.2 起官方占用的新增 id 有 `chat.quota-notice`, `schedule.delete-toast`, `account.platform-page`, `desktop-onboarding`, 以及同时占用 `settings.general.item` 与 `shell.overlay` 的 `shortcuts`; 自己的行 id 带插件前缀最省事.
+
+同期新增的插槽有三个: `shell.quota-notice`, `sidebar.session.row.leading`, `sidebar.session.row.hover`, 都是追加注册, 不替换既有落点.
+
 ## 3. 与原生风格一致
 
 先查 ui-primitives 的组件目录(`packages/client/ui-primitives/README.zh.md`): 它是跨包复用控件的唯一通道, 合适的控件直接复用, 有意的视觉差异提升成 prop, 不要另写一份. 设置表单专用的组件:
@@ -111,6 +115,15 @@ export function ExampleCard(props: ExampleCardProps) {
 - 官方字段控件只覆盖单行文本, 数字与密文三类. 布尔, 选择, 多行文本, 颜色这类字段需要自绘控件, 但仍然放进 `SettingsForm` 里, 并复刻官方字段行的节奏: 标签 13px/500, 说明 12px tertiary, `已覆盖` 标记与 `恢复默认` 靠右, 每行 `padding: 12px 0`, 行间 `0.5px solid var(--dsw-alias-border-l2)`. 官方 primitives 里可直接复用的控件有 `Switch`, `Menu`, `Tag`, `Button`, `Input`, `SegmentedControl`.
 - 自绘控件的样式作用域要跟着落点走. 从旧设置页搬过来的 CSS 常带 `[data-my-plugin]` 一类的作用域选择器, 落点换成插件卡片后那个根元素并不存在, 规则会全部失配: 界面看起来是裸文本 (标签没有字号, 输入框是浏览器默认样式), 而不是 "样式有点不同". 搬迁时要么去掉作用域, 要么把根元素一起搬.
 - `SettingsFormModel` 的字段名只映射到顶层一段路径, 嵌套对象 (`colors.<类别>`) 与字典 (`toolColors.<工具名>`) 用它寻址不到. 这类配置要么把 schema 拍平成顶层字段, 要么自写暂存层, 保存时用 `mutate([{ op: 'set', path: ['colors', 'search'], value }])` 按路径批量写 (Host 侧 `isVolatilePath` 允许 volatile 子树下的任意路径).
+
+0.1.7-rc.2 起有几处控件契约变了, 复用时按新行为写:
+
+- `Menu` 与 `TabMenu` 的 DOM 变成两层 (外层 `data-menu-material`, 内层 material 节点), macOS 上还会往 `document.body` 追加门户节点. 选择器用 `[role=menuitem]`, 不要假设菜单的第一个子节点是条目.
+- `Modal` 的 Escape 与焦点管理改由 `useModalLayer` 栈式管理 (关闭时归还焦点), 新增 `backdropBlur` 与 `shortcutModal` 两个 prop. 仍靠 React `autoFocus` 的模态关闭后回不到触发控件, 初始焦点要标在 `data-modal-autofocus` 上.
+- `Tooltip` 新增 `shortcutKeys`, 传入后文案包进内层 `span`, 依赖 `:first-child` 的样式会失配.
+- `Button` 变成 `forwardRef`, `typeof Button` 现在是 `ForwardRefExoticComponent`.
+- `ui-primitives` 不再导出 `OnboardingSurface`; 需要引导浮层时自己组 `Modal`, 或照包里的实现自写一份.
+- 主题 token: 菜单材质填充改用 `--dsw-menu-surface-fill` (只覆盖 `--dsw-specific-menu` 这类别名层会留下半透明底); `--dsw-mask-blur` 现在是 `none`; 焦点环基准由 `--dsw-alias-brand-primary` 迁到 `--dsw-alias-state-business-primary`; `--dsw-alias-bg-document-preview` 与 `--dsw-alias-label-document-preview` 的浅色取值语义互换.
 
 ## 4. Client module loader
 

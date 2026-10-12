@@ -22,14 +22,20 @@ build-client:
 # 构建全部 Host 和 Client bundle.
 build: build-host build-client
 
+# 检查 Client bundle 满足宿主加载契约: 顶层只留注册调用, 且注册 id 等于包名.
+# 项目里没有这个脚本时, 先把技能 templates/check-client-bundle.mjs 复制到 scripts/.
+check-client:
+    node scripts/check-client-bundle.mjs lib/client.js
+
 # 执行项目测试套件.
 test:
     pnpm test
 
-# 检查 Client loader 注册和生成的 package 内容.
+# 检查 Client loader 注册, 顶层自隔离和生成的 package 内容.
 verify:
     just typecheck
     just build
+    just check-client
     pnpm test
     pnpm pack --dry-run
 

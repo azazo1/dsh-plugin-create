@@ -154,11 +154,14 @@ client-modules: bundle <url> loaded without registering "<id>" via __ModuleLoade
 
 任何一处不一致都会让 client 半区静默缺席 boot graph. 浏览器半区的注册失败会进入 load report, 在 Settings -> Plugins 的插件列表里可以看到, 也可以用 `cordis_inspect_list` / `cordis_inspect_query`(需要 provider 与 method)诊断.
 
-Client entry 必须是浏览器脚本, 不能保留顶层 ESM `import` 或 `export`. 官方形态是把 Client 输出成 `lib/client.js`: CJS 包装加 banner/footer 注入 `__ModuleLoader__.load({ id, factory })`, 并由 `dsh.client` 声明送出; 自建构建时用 IIFE 达到同样效果也可以, 只要顶层完成注册. 构建配置见 [build-and-test.md](build-and-test.md).
+Client entry 必须是浏览器脚本, 不能保留顶层 ESM `import` 或 `export`. 官方形态是把 Client 输出成 `lib/client.js`: CJS 包装加 banner/footer 注入 `__ModuleLoader__.load({ id, factory })`, 并由 `dsh.client` 声明送出.
+
+自建构建时必须用 IIFE (或等价的包装) 把整个 bundle 关进一个函数作用域: 脚本顶层除注册调用外**不留任何声明**. dsh 会把同一批次的多个插件 bundle 拼接进同一个 classic script 执行, 顶层 `const` / `let` / `class` 因此跨插件共享, 重名会让**整批**插件都注册不上, 而启动页会把失败算到同批的别的插件头上. 机制, 症状与检查手段见 [build-and-test.md](build-and-test.md) 的 bundle 顶层必须自隔离一节.
 
 ## 5. 验证
 
 - 索引页的 `window.__DSH_BOOT__.entries` 包含 `"id":"<package name>"`.
+- Client bundle 的脚本顶层没有声明: 用 [templates/check-client-bundle.mjs](../templates/check-client-bundle.mjs) 或等价的解析检查, 只看单包能不能加载是发现不了这个问题的.
 - `/plugins/<package>/client.js` 返回 Client bundle, 且内容含 `__ModuleLoader__.load({ id: "<package name>"`; 404 表示 Host entry 未激活, package 未在 profile bundles 中, 或 Client metadata 未被扫描.
 - 启动日志没有 `loaded without registering` 或 boot activation audit 报错.
 - 改过 bundle metadata, Client export 或 Client bundle 后重启 `dsh web`, 因为 Client metadata 的扫描结果会在进程内缓存.

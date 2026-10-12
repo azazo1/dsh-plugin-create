@@ -71,6 +71,45 @@ window.__ModuleLoader__.load({
 
 Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出普通 ESM, 会出现 `client-modules: bundle <url> loaded without registering "<id>" via __ModuleLoader__.load`.
 
+### bundle 顶层必须自隔离
+
+dsh 的 combo 路由把同一个批次里多个插件的 client bundle 源码**首尾拼接成同一个 classic script** 再交给浏览器 (批次按 combo URL 长度分组, 内容随 profile 里装了哪些插件而变), 拼接处只补一个分号. 而 classic script 顶层的 `const` / `let` / `class` 会进入**跨脚本共享的全局词法环境**: 两个插件各写一个 `const zh`, 整段拼接脚本就是 `SyntaxError: Identifier 'zh' has already been declared`, **该批次里所有插件一个都注册不上**. (`var` 和函数声明走 globalThis, 表现是不报错但互相覆盖, 同样不该出现在顶层.)
+
+这是已经真实发生的故障, 不是理论风险. 一个 `tsc` 直出的插件在顶层留着 `const zh` / `const en`, 与同批次的另一个插件撞名, 启动页报告的是**别人**:
+
+```text
+web boot: 1 entry did not activate
+dsh-prompt-inject: import failed (see console for the import error)
+```
+
+真正的线索只出现在浏览器 console 里:
+
+```text
+Uncaught SyntaxError: Identifier 'zh' has already been declared
+```
+
+几个必须知道的误判点:
+
+- **报错插件是受害者, 不是肇事者**. 整批解析失败后每个包回退到单资源 URL 逐个加载, 谁先把重名符号声明进全局, 之后执行的那个才报 SyntaxError; 批次 URL 上那条报错也一样, 它标注的是脚本里冲突发生的位置, 不是哪个插件的错.
+- `import failed (see console for the import error)` 的含义是 "这个 entry 没有 fiber, 且模块表里没记到 import 异常". 语法错误发生在整个脚本的解析阶段, 早于 `__ModuleLoader__.load` 执行, 模块表根本来不及记录, 所以文案把人引向 import, 实际是脚本压根没跑起来.
+- **只在单包实例上验证永远看不出来**. 同批次的伙伴变了, 冲突才出现; 同一个插件今天独立成批, 明天和别人同批, 表现为 "有时好有时坏".
+- 最容易撞的是短名和字面词典名: `zh`, `en`, `PLUGIN_ID`, `CSS_ID`, `CSS_TEXT`, `styles` 这类几乎人人都会写的名字.
+
+硬约束: **client bundle 的脚本顶层, 除注册调用本身外不得有任何语句**. 所有声明留在 IIFE (或打包器的 CJS 包装) 之内:
+
+```ts
+declare const __ModuleLoader__: { load(registration: { id: string, factory: (require: (name: string) => unknown) => unknown }): void }
+
+;(() => {
+  const PLUGIN_ID = 'dsh-example'
+  const zh = { /* 词典 */ }
+  // ...其余全部代码, 包括所有顶层 const 与 function...
+  __ModuleLoader__.load({ id: PLUGIN_ID, factory: createFactory })
+})()
+```
+
+`declare` 只产生类型信息, 放在 IIFE 外; 其余全部进 IIFE. `tsc` 直出时不需要重新缩进整个文件, 只在首尾各加一行就够, 这样 diff 只有两行, 好审查.
+
 `factory` 的 `require` 从平台模块表解析依赖, 表中可用的模块有: `react`, `react/jsx-runtime`, `react-dom`, `react-dom/client`, `@deepseek-ai/cordis`, `@deepseek-ai/dsh-client-store`, `@deepseek-ai/dsh-client-ui-slots`, `@deepseek-ai/dsh-client-ui-primitives`, `@deepseek-ai/dsh-client-ui-dockkit`. 表外模块在构建时必须打进 bundle, 运行时请求表外模块会直接抛错. React 放在 peerDependencies 中.
 
 表内的包要在构建里标成 external (`deps.neverBundle`), 否则打包器会顺着 import 把宿主包打进来, 或者直接报错: `@deepseek-ai/dsh-client-ui-primitives` 会带进它的 `.module.css`, 报 `CSS file ... was encountered but @tsdown/css is not installed`; `@deepseek-ai/dsh-client-store` 同理. 只用于类型的包 (`-ui-settings`, `-ui-plugin-manager`, `-ui-slots`, `-ui-renderer`, `-ui-locale`) 用 `import type` 引入, 不占模块表.
@@ -81,7 +120,7 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 - Client: 浏览器目标, 输出到 `lib/client.js`. 官方 client bundle 使用 CJS 包装 + banner/footer 注入 `__ModuleLoader__.load({ id, factory })`, 外部插件用 IIFE 达到同样效果即可; 无论哪种形态, 顶层都必须完成注册, 并在 `dsh.client` 声明 `platform: 'web'` 与 Client 入口.
 - `package.json` 的 `./client` export 指向实际的 Client 产物文件.
 
-构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, 并包含正确的 loader registration.
+构建后检查 Client 文件没有顶层 `import` 或 ESM `export`, **没有任何顶层声明** (见上文的顶层自隔离硬约束), 并包含正确的 loader registration.
 
 三种产物形态与各自的约束 (写 TSX 时 `tsconfig` 要开 `jsx: react-jsx`):
 
@@ -89,7 +128,7 @@ Client 文件必须注册和 package name 完全一致的 `id`. 如果只输出�
 |---|---|---|
 | tsdown banner/footer 包成 CJS (官方形态) | banner 注入 | 顶层 `import` 平台模块, 产物里变成 `require` |
 | entry 自己调 `__ModuleLoader__.load` 的 IIFE | entry 里写 | 只能经 factory 的 `require`, 组件写成工厂 + `createElement` |
-| `tsc` 直出的单文件脚本 (无打包器) | entry 里写 | 同上; 文件里不能出现任何 `import` / `export` |
+| `tsc` 直出的单文件脚本 (无打包器) | entry 里写 | 同上; 文件里不能出现任何 `import` / `export`, 且整个文件必须包在 IIFE 内, 脚本顶层不留声明 |
 
 Client 半区常见的 devDependencies: `-ui-settings` (`ConfigForm` 类型), `-ui-primitives` (表单与控件), `-ui-plugin-manager` (SlotMap 合并, 让 `plugins.bundle.config` 这类 key 有类型), `-ui-slots` (`PropsRuntime` / `PropsLocale` / `InjectFace`), `-ui-renderer` (Context 上的 `slots` 合并), `-dsh-client-store` (`SnapshotStore`), `-dsh-client-locale` (`ctx.locale`).
 
@@ -101,6 +140,7 @@ Client 半区常见的 devDependencies: `-ui-settings` (`ConfigForm` 类型), `-
 
 - 类型检查通过.
 - 构建可以从 `src/` 生成 `lib/`.
+- Client bundle 的脚本顶层只有注册调用, 没有声明 (见 Web Client 特殊构建一节); `templates/check-client-bundle.mjs` 可以直接查这一条.
 - `package.json` 的入口可以加载生成产物.
 - 包内容不包含源码外的临时文件.
 - 新增依赖没有改变不相关的插件行为.
@@ -133,4 +173,4 @@ Client bundle 的验证脚本要 **stub 平台模块**, 不要真的 `require` �
 
 对于带 `bin` 的包, 构建产物必须在本机 Node 下运行 (不用 tsx), 暴露 tsx 可能隐藏的关闭竞态, 模块解析和被吞掉的加载失败; 缺少必需配置时进程必须非零退出.
 
-Web Client 插件还必须真实挂载验证, 而不是只接受一个 HTTP 200: 读取 host boot manifest, 请求宣告的 client artifact, 证明注册和挂载完成.
+Web Client 插件还必须真实挂载验证, 而不是只接受一个 HTTP 200: 读取 host boot manifest, 请求宣告的 client artifact, 证明注册和挂载完成. 想专门复现 "同批次拼接" 这一类故障, 就照 host 宣告的 combo URL (形如 `plugins/??<id>/client.js,<另一个 id>/client.js&rev=...`) 把整段脚本拉下来, 在一个假 `window.__ModuleLoader__` 下用 Node VM 执行: 批内撞名的语法错误会在这里原样抛出, 而单包实例上什么问题都看不出来. 安装到真实 profile 后, 这一步应当覆盖 profile 里**全部**在装插件, 因为失败只取决于 "谁和谁被分到了同一批".

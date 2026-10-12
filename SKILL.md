@@ -15,5 +15,5 @@ description: 创建和维护 DeepSeek Harness 插件, 覆盖插件 Config 与 vo
 - [Plugin Structure](references/plugin-structure.md): 插件目录, package manifest, bundle patch, 引擎版本线兼容性 preflight 和安装来源.
 - [Dual Host](references/dual-host.md): web 与 desktop 两个宿主的关系, 安装路径差异和双宿主插件的写法.
 - [Client UI](references/client-ui.md): 界面落点与插件配置卡片, `ctx.configForms` 数据面, 原生风格控件和 Client module loader.
-- [Build And Test](references/build-and-test.md): TypeScript 构建, Host/Client 双入口, loader registration 和真实组合验证.
+- [Build And Test](references/build-and-test.md): TypeScript 构建, Host/Client 双入口, loader registration, client bundle 顶层自隔离 (顶层声明会与同批次插件撞名, 让整批插件都注册不上) 和真实组合验证.
 - [Release](references/release.md): 参考 `create-github-release-flow` 完成发布.

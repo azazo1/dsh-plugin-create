@@ -33,7 +33,7 @@ ctx.effect(() => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject(
 | slot | 用途 | 备注 |
 |---|---|---|
 | `settings.general.item` | General 里的一行 | owner props 为空, 行自己画标题, 描述与控件 |
-| `settings.section` | 设置面板里的独立页 | 注册选项带 `id`, `order`, `label`; 页面收到 `close` |
+| `settings.section` | 设置面板里的独立页 | 注册选项带 `id`, `order`, `label`; 页面收到 `close`. 官方功能插件给自己开页时占用的槽(账号, 预设, 聊天等), 外部插件不要拿它当自己的配置落点 |
 | `settings.plugins.tab` | 内置插件分区里的一个 tab | 只在需要 tab 入口时使用 |
 | `plugins.item` | 官方插件列表里的卡片与其配置页 | 由官方配置页占用, 外部插件不要注册 |
 | `plugins.bundle.config` | 某个 bundle 自己的配置页 | keyed slot, 键等于包名 |
@@ -55,27 +55,26 @@ Plugins 页面的配置 entry 会收到 `view` owner prop: `summary` 渲染一�
 - `SettingsValueField` / `SettingsSecretField`: 单字段控件, 显示暂存文本, 已覆盖标记与重置; 密文字段每次为空, 只报告是否已配置.
 - `SettingsFormModel` + `settingsTextField` / `settingsNumberField`: 暂存编辑模型, 保存时才把草稿写成一个带修订号的写入.
 
-一个最小整页实现见官方 shell 配置页 `packages/client/ui-settings-shell/`(整个包只有三个文件):
+一个最小整页实现照官方 shell 配置页 `packages/client/ui-settings-shell/` 写即可. 那个包是官方插件, 整页挂在 `plugins.item` 上; 外部插件把同一段 body 注册到 `plugins.bundle.config`, 键用包名:
 
 ```ts
 export const inject = ['slots', 'locale', 'configForms']
 
 export function apply(ctx: Context): void {
-  const t = ctx.locale.bind(NS)
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'example: dictionaries')
   const form = new SettingsFormModel(ctx.configForms.get<ExampleSettings>(ENTRY_ID), [settingsTextField('message')])
   const store = form.bind(() => ({ ...form.shell(), message: form.field('message') }))
   ctx.effect(() => () => { form.dispose() }, 'example: form subscription')
-  ctx.effect(() => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject('plugins.item', () => ctx.slots.register({
-    name: 'plugins.item',
-    id: 'example',
-    order: 100,
-    label: () => t('title'),
+  ctx.effect(() => ctx.configForms.whileServed([ENTRY_ID], () => ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: PACKAGE_NAME,
     locale: NS,
     inject: () => ({ hooks: { exampleCard: store }, ...form.actions() }),
-  }, ExampleCard))), 'example: settings page')
+  }, ExampleCard))), 'example: plugins page card')
 }
 ```
+
+`view` 是给 list 槽的: 官方插件在 `plugins.item` 上同一份实现既画卡片上的一行简介(`summary`), 也画页面里的完整表单(`page`). `plugins.bundle.config` 只收到 `page`, 外部插件的卡片里那段 summary 分支可以省掉.
 
 组件从 props 读取:
 
